@@ -1,1 +1,39 @@
-<!doctype html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>nvflasher</title><link rel="stylesheet" href="/src/style.css"/></head><body><div id="app"><aside><h2><b>N</b> nvflasher</h2><small>JETSON WORKSTATION · v0.1.0</small><nav id="nav"></nav><small class="foot">Linux for Tegra<br/>Official NVIDIA toolchain wrapper</small></aside><main><header><span id="host"></span><span id="device-count"></span></header><section id="panel"></section><div id="drawer"><div class="toolbar"><strong>RUN LOG</strong><span id="status">Ready</span><span class="spacer"></span><label><input id="autoscroll" type="checkbox" checked/> Auto-scroll</label><button id="copy">Copy</button><button id="save">Save</button><button id="hide">Hide</button></div><pre id="log"></pre></div></main></div><script type="module" src="/src/main.ts"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>nvflasher</title>
+  <link rel="stylesheet" href="/src/style.css"/>
+  <link rel="stylesheet" href="/src/layout.css"/>
+</head>
+<body>
+  <div id="app">
+    <aside>
+      <h2><b>N</b> nvflasher</h2>
+      <small>JETSON WORKSTATION · v0.1.0</small>
+      <nav id="nav" aria-label="Workflows"></nav>
+      <div class="aside-bottom"><button id="open-settings">Settings</button><small class="foot">Linux for Tegra<br/>Official NVIDIA toolchain wrapper</small></div>
+    </aside>
+    <main>
+      <header>
+        <span id="host"></span>
+        <span id="device-count"></span>
+        <label class="language">Language<select id="language" aria-label="Language"><option value="en">English</option><option value="zh-CN">简体中文</option></select></label>
+      </header>
+      <div id="wizard-bar"><span id="wizard-progress"></span><strong id="wizard-title"></strong></div>
+      <section id="panel"></section>
+      <div id="wizard-controls"><button id="wizard-back">Back</button><span id="wizard-position"></span><button class="primary" id="wizard-next">Next step</button></div>
+      <div id="drawer">
+        <div class="toolbar">
+          <strong>RUN LOG</strong><span id="status">Ready</span><span class="spacer"></span>
+          <label><input id="autoscroll" type="checkbox" checked/> Auto-scroll</label>
+          <button id="copy">Copy</button><button id="save">Save</button><button id="hide">Hide</button>
+        </div>
+        <pre id="log"></pre>
+      </div>
+    </main>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

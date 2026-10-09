@@ -12,6 +12,7 @@ import (
 	"nvflasher/internal/massflash"
 	"nvflasher/internal/provision"
 	"nvflasher/internal/runner"
+	"nvflasher/internal/setup"
 	"nvflasher/internal/sshx"
 	"nvflasher/internal/tegra"
 	"nvflasher/internal/usbwatch"
@@ -19,14 +20,33 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 )
 
 type Environment struct{}
 
-func (Environment) Detect(dir string) tegra.Report       { return tegra.Inspect(dir) }
-func (Environment) Capabilities() capability.Status      { return capability.Detect() }
+func (Environment) Detect(dir string) tegra.Report  { return tegra.Inspect(dir) }
+func (Environment) Capabilities() capability.Status { return capability.Detect() }
+func (Environment) InstallPlan() (capability.InstallPlan, error) {
+	return capability.DetectInstallPlan()
+}
+func (Environment) InstallDependencies(ctx context.Context, lines *mygo.Channel[string]) error {
+	if err := requireHost(); err != nil {
+		return err
+	}
+	plan, err := capability.DetectInstallPlan()
+	if err != nil {
+		return err
+	}
+	for _, args := range plan.Commands {
+		if err := runner.Run(ctx, runner.Command{Args: args}, func(line string) { _ = lines.Send(line) }); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 func (Environment) GetConfig() (config.Config, error)    { return config.Load() }
 func (Environment) SaveConfig(value config.Config) error { return config.Save(value) }
 func (Environment) Presets() []tegra.Preset              { return tegra.Presets }
@@ -46,6 +66,48 @@ func (Environment) RestartAsRoot() error {
 		return err
 	}
 	return exec.Command("pkexec", self).Start()
+}
+
+func (Environment) RestartWithSudo(password string) error {
+	if runtime.GOOS != "linux" {
+		return fmt.Errorf("Linux only")
+	}
+	if password == "" {
+		return fmt.Errorf("sudo password required")
+	}
+	self, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	if err := authenticateSudo(password); err != nil {
+		return err
+	}
+	preserve := "--preserve-env=DISPLAY,WAYLAND_DISPLAY,XDG_RUNTIME_DIR,DBUS_SESSION_BUS_ADDRESS,XAUTHORITY"
+	if err := exec.Command("sudo", "-n", preserve, "--", "true").Run(); err != nil {
+		return fmt.Errorf("sudo could not preserve the graphical session: %w", err)
+	}
+	cmd := exec.Command("sudo", "-n", preserve, "--", self)
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("could not start elevated application: %w", err)
+	}
+	finished := make(chan error, 1)
+	go func() { finished <- cmd.Wait() }()
+	select {
+	case err := <-finished:
+		return fmt.Errorf("elevated application exited before opening: %v", err)
+	case <-time.After(time.Second):
+	}
+	mygo.App.Quit()
+	return nil
+}
+
+func authenticateSudo(password string) error {
+	check := exec.Command("sudo", "-S", "-p", "", "-v")
+	check.Stdin = strings.NewReader(password + "\n")
+	if err := check.Run(); err != nil {
+		return fmt.Errorf("sudo authentication failed: %w", err)
+	}
+	return nil
 }
 
 type Devices struct{}
@@ -318,6 +380,34 @@ func (Recovery) Trigger(ctx context.Context, request sshx.Request) error {
 
 type Download struct{ operation }
 
+type Setup struct{ operation }
+
+func (Setup) Models() []setup.Model { return setup.Models() }
+func (Setup) Location(modelID, directory string) (string, error) {
+	return setup.Location(modelID, directory)
+}
+
+func (s *Setup) Download(ctx context.Context, modelID, directory, proxyURL string, lines *mygo.Channel[string]) error {
+	ctx, err := s.begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer s.end()
+	return setup.Download(ctx, modelID, directory, proxyURL, func(line string) { _ = lines.Send(line) })
+}
+
+func (s *Setup) Prepare(ctx context.Context, modelID, directory string, lines *mygo.Channel[string]) (string, error) {
+	if err := requireHost(); err != nil {
+		return "", err
+	}
+	ctx, err := s.begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer s.end()
+	return setup.Prepare(ctx, modelID, directory, func(line string) { _ = lines.Send(line) })
+}
+
 func (d *Download) Start(ctx context.Context, request download.Request, events *mygo.Channel[download.Progress]) error {
 	ctx, err := d.begin(ctx)
 	if err != nil {
@@ -334,7 +424,7 @@ func (d *Download) TestProxyFor(ctx context.Context, address, target string) err
 }
 func (d *Download) Show(path string) error { return download.Show(path) }
 func main() {
-	mygo.Bind(Environment{}, Devices{}, &Flash{}, &Massflash{}, &Provision{}, Recovery{}, &Download{})
+	mygo.Bind(Environment{}, Devices{}, &Flash{}, &Massflash{}, &Provision{}, Recovery{}, &Download{}, &Setup{})
 	mygo.App.WhenReady(func() {
 		mygo.NewWindow(mygo.WindowOptions{Title: "nvflasher", Width: 1120, Height: 760, MinWidth: 780, MinHeight: 560, BackgroundColor: "#101820", StateKey: "main", URL: "/"})
 	})

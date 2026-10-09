@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -18,6 +19,7 @@ type Command struct {
 	Dir   string
 	Args  []string
 	Input string
+	Env   []string
 }
 
 func Run(ctx context.Context, spec Command, emit func(string)) error {
@@ -27,6 +29,9 @@ func Run(ctx context.Context, spec Command, emit func(string)) error {
 	cmd := exec.Command(spec.Args[0], spec.Args[1:]...)
 	cmd.Dir = spec.Dir
 	cmd.Stdin = strings.NewReader(spec.Input)
+	if len(spec.Env) != 0 {
+		cmd.Env = append(os.Environ(), spec.Env...)
+	}
 	prepare(cmd)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {

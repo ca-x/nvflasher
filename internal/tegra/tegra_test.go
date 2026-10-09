@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -36,5 +37,15 @@ func TestInspect(t *testing.T) {
 	report := Inspect(dir)
 	if report.Version == "" || len(report.Boards) != 1 || report.Checks[2].Status != "ok" {
 		t.Fatalf("%+v", report)
+	}
+}
+func TestInspectIncompleteApply(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "rootfs"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	report := Inspect(dir)
+	if report.Checks[2].Status != "error" || !strings.Contains(report.Checks[2].Hint, "Download step") {
+		t.Fatalf("unhelpful preparation hint: %+v", report.Checks[2])
 	}
 }

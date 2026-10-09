@@ -24,6 +24,8 @@ export interface Device {
   path: string;
   product: string;
   mode: string;
+  boardIds: string;
+  release: string;
 }
 
 export interface DownloadRequest {
@@ -34,6 +36,20 @@ export interface DownloadRequest {
   sha256: string;
 }
 
+export interface InstallPlan {
+  distribution: string;
+  packages: string[];
+  commands: string[][];
+}
+
+export interface Model {
+  id: string;
+  name: string;
+  release: string;
+  board: string;
+  packages: Package[];
+}
+
 export interface Options {
   board: string;
   device: string;
@@ -41,6 +57,12 @@ export interface Options {
   qspi: string;
   erase: boolean;
   showLogs: boolean;
+}
+
+export interface Package {
+  name: string;
+  url: string;
+  sha1: string;
 }
 
 export interface Preset {
@@ -130,11 +152,20 @@ export const Environment = {
   getConfig(): Promise<Config> {
     return call("Environment.GetConfig");
   },
+  installDependencies(lines: Channel<string>): Promise<void> {
+    return call("Environment.InstallDependencies", lines);
+  },
+  installPlan(): Promise<InstallPlan> {
+    return call("Environment.InstallPlan");
+  },
   presets(): Promise<Preset[]> {
     return call("Environment.Presets");
   },
   restartAsRoot(): Promise<void> {
     return call("Environment.RestartAsRoot");
+  },
+  restartWithSudo(password: string): Promise<void> {
+    return call("Environment.RestartWithSudo", password);
   },
   saveConfig(value: Config): Promise<void> {
     return call("Environment.SaveConfig", value);
@@ -219,6 +250,24 @@ export const Download = {
   },
   testProxyFor(address: string, target: string): Promise<void> {
     return call("Download.TestProxyFor", address, target);
+  },
+} as const;
+
+export const Setup = {
+  cancel(): Promise<void> {
+    return call("Setup.Cancel");
+  },
+  download(modelID: string, directory: string, proxyURL: string, lines: Channel<string>): Promise<void> {
+    return call("Setup.Download", modelID, directory, proxyURL, lines);
+  },
+  location(modelID: string, directory: string): Promise<string> {
+    return call("Setup.Location", modelID, directory);
+  },
+  models(): Promise<Model[]> {
+    return call("Setup.Models");
+  },
+  prepare(modelID: string, directory: string, lines: Channel<string>): Promise<string> {
+    return call("Setup.Prepare", modelID, directory, lines);
   },
 } as const;
 

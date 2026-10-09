@@ -66,6 +66,9 @@ func Inspect(dir string) Report {
 		info, err := os.Stat(filepath.Join(dir, item.path))
 		if err != nil || info.IsDir() != item.directory {
 			status, hint = "error", "Missing "+item.path+"; extract BSP/rootfs and run apply_binaries.sh"
+			if item.name == "apply_binaries" {
+				hint = "Missing " + item.path + "; run BSP preparation in the Download step"
+			}
 		}
 		result.Checks = append(result.Checks, Check{item.name, status, hint})
 	}

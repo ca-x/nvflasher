@@ -20,3 +20,12 @@ func TestCancel(t *testing.T) {
 		t.Fatal("expected cancellation")
 	}
 }
+func TestCommandEnv(t *testing.T) {
+	var output string
+	if err := Run(t.Context(), Command{Args: []string{"sh", "-c", "printf '%s\\n' \"$SETUP_TEST_VALUE\""}, Env: []string{"SETUP_TEST_VALUE=ready"}}, func(line string) { output += line }); err != nil {
+		t.Fatal(err)
+	}
+	if output != "ready" {
+		t.Fatalf("child env: %q", output)
+	}
+}
