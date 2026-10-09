@@ -17,7 +17,7 @@ func Generate(ctx context.Context, dir string, opts tegra.Options, count int, em
 	if err != nil {
 		return err
 	}
-	args = append(args, "--no-flash", "--massflash", fmt.Sprint(count))
+	args = append(args[:len(args)-2], append([]string{"--no-flash", "--massflash", fmt.Sprint(count)}, args[len(args)-2:]...)...)
 	return runner.Run(ctx, runner.Command{Dir: dir, Args: args}, emit)
 }
 func Flash(ctx context.Context, dir string, count int, show bool, emit func(string)) error {

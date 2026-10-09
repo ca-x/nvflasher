@@ -2,6 +2,8 @@ package download
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"golang.org/x/net/proxy"
 	"io"
@@ -9,7 +11,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -19,15 +23,19 @@ type Request struct {
 	Directory string `json:"directory"`
 	Filename  string `json:"filename"`
 	ProxyURL  string `json:"proxyUrl"`
+	SHA256    string `json:"sha256"`
 }
 type Progress struct {
 	Bytes int64  `json:"bytes"`
 	Total int64  `json:"total"`
 	File  string `json:"file"`
+	Rate  int64  `json:"rate"`
+	ETA   int64  `json:"eta"`
 }
 
 func client(proxyURL string) (*http.Client, error) {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = nil
 	if proxyURL != "" {
 		parsed, err := url.Parse(proxyURL)
 		if err != nil {
@@ -42,6 +50,9 @@ func client(proxyURL string) (*http.Client, error) {
 				return nil, err
 			}
 			transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+				if contextual, ok := dialer.(proxy.ContextDialer); ok {
+					return contextual.DialContext(ctx, network, address)
+				}
 				return dialer.Dial(network, address)
 			}
 		default:
@@ -59,6 +70,14 @@ func client(proxyURL string) (*http.Client, error) {
 	}}, nil
 }
 func Start(ctx context.Context, r Request, emit func(Progress)) error {
+	httpClient, err := client(r.ProxyURL)
+	if err != nil {
+		return err
+	}
+	return start(ctx, r, emit, httpClient)
+}
+
+func start(ctx context.Context, r Request, emit func(Progress), httpClient *http.Client) error {
 	source, err := url.Parse(r.URL)
 	if err != nil || source.Host == "" || (source.Scheme != "http" && source.Scheme != "https") {
 		return fmt.Errorf("HTTP(S) direct URL required")
@@ -77,15 +96,11 @@ func Start(ctx context.Context, r Request, emit func(Progress)) error {
 	if _, err = os.Stat(target); err == nil {
 		return fmt.Errorf("file already exists: %s", target)
 	}
-	client, err := client(r.ProxyURL)
-	if err != nil {
-		return err
-	}
 	req, err := http.NewRequestWithContext(ctx, "GET", r.URL, nil)
 	if err != nil {
 		return err
 	}
-	response, err := client.Do(req)
+	response, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -100,17 +115,24 @@ func Start(ctx context.Context, r Request, emit func(Progress)) error {
 	defer os.Remove(target + ".part")
 	defer file.Close()
 	buffer := make([]byte, 64*1024)
+	hasher := sha256.New()
 	var count int64
-	last := time.Now()
+	last, started := time.Now(), time.Now()
 	for {
 		size, readErr := response.Body.Read(buffer)
 		if size > 0 {
 			if _, err = file.Write(buffer[:size]); err != nil {
 				return err
 			}
+			_, _ = hasher.Write(buffer[:size])
 			count += int64(size)
 			if time.Since(last) > 250*time.Millisecond {
-				emit(Progress{count, response.ContentLength, target})
+				rate := int64(float64(count) / time.Since(started).Seconds())
+				eta := int64(0)
+				if response.ContentLength > 0 && rate > 0 {
+					eta = (response.ContentLength - count) / rate
+				}
+				emit(Progress{Bytes: count, Total: response.ContentLength, File: target, Rate: rate, ETA: eta})
 				last = time.Now()
 			}
 		}
@@ -121,23 +143,59 @@ func Start(ctx context.Context, r Request, emit func(Progress)) error {
 			return readErr
 		}
 	}
+	if r.SHA256 != "" {
+		if len(r.SHA256) != 64 {
+			return fmt.Errorf("SHA256 must contain 64 hexadecimal characters")
+		}
+		if _, err = hex.DecodeString(r.SHA256); err != nil {
+			return fmt.Errorf("invalid SHA256: %w", err)
+		}
+		if !strings.EqualFold(hex.EncodeToString(hasher.Sum(nil)), r.SHA256) {
+			return fmt.Errorf("SHA256 mismatch; downloaded file discarded")
+		}
+	}
 	if err = file.Close(); err != nil {
 		return err
 	}
 	if err = os.Rename(target+".part", target); err != nil {
 		return err
 	}
-	emit(Progress{count, response.ContentLength, target})
+	emit(Progress{Bytes: count, Total: response.ContentLength, File: target, Rate: int64(float64(count) / time.Since(started).Seconds())})
 	return nil
 }
+
+func Show(path string) error {
+	if _, err := os.Stat(path); err != nil {
+		return err
+	}
+	var command string
+	var args []string
+	switch runtime.GOOS {
+	case "darwin":
+		command, args = "open", []string{"-R", path}
+	case "windows":
+		command, args = "explorer", []string{"/select,", path}
+	default:
+		command, args = "xdg-open", []string{filepath.Dir(path)}
+	}
+	return exec.Command(command, args...).Start()
+}
 func TestProxy(ctx context.Context, address string) error {
+	return TestProxyFor(ctx, address, "https://developer.nvidia.com/embedded/jetson-linux-archive")
+}
+
+func TestProxyFor(ctx context.Context, address, target string) error {
 	client, err := client(address)
 	if err != nil {
 		return err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, "HEAD", "https://developer.nvidia.com/embedded/jetson-linux-archive", nil)
+	parsed, err := url.Parse(target)
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "https" && parsed.Scheme != "http") {
+		return fmt.Errorf("target must be an HTTP(S) URL")
+	}
+	req, err := http.NewRequestWithContext(ctx, "HEAD", target, nil)
 	if err != nil {
 		return err
 	}

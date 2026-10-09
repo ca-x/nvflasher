@@ -16,6 +16,8 @@ export interface Config {
   downloadDir: string;
   logLimit: number;
   proxy: Proxy;
+  flash?: Options;
+  provision?: ProvisionForm;
 }
 
 export interface Device {
@@ -29,6 +31,7 @@ export interface DownloadRequest {
   directory: string;
   filename: string;
   proxyUrl: string;
+  sha256: string;
 }
 
 export interface Options {
@@ -49,6 +52,21 @@ export interface Progress {
   bytes: number;
   total: number;
   file: string;
+  rate: number;
+  eta: number;
+}
+
+export interface ProvisionForm {
+  username: string;
+  hostname: string;
+  autologin: boolean;
+  publicKey: string;
+  packages: string;
+  script: string;
+  overlay: string;
+  clearKeys: boolean;
+  clearMachineId: boolean;
+  firstBoot: boolean;
 }
 
 export interface ProvisionOptions {
@@ -190,11 +208,17 @@ export const Download = {
   cancel(): Promise<void> {
     return call("Download.Cancel");
   },
+  show(path: string): Promise<void> {
+    return call("Download.Show", path);
+  },
   start(request: DownloadRequest, events: Channel<Progress>): Promise<void> {
     return call("Download.Start", request, events);
   },
   testProxy(address: string): Promise<void> {
     return call("Download.TestProxy", address);
+  },
+  testProxyFor(address: string, target: string): Promise<void> {
+    return call("Download.TestProxyFor", address, target);
   },
 } as const;
 

@@ -129,26 +129,44 @@ func Run(ctx context.Context, dir string, o Options, emit func(string)) error {
 	return nil
 }
 func withChroot(ctx context.Context, root string, run func() error) error {
-	qemu, err := os.ReadFile("/usr/bin/qemu-aarch64-static")
-	if err != nil {
-		return err
-	}
 	dest := filepath.Join(root, "usr/bin/qemu-aarch64-static")
-	if err = os.WriteFile(dest, qemu, 0755); err != nil {
+	if _, err := os.Stat(dest); os.IsNotExist(err) {
+		qemu, readErr := os.ReadFile("/usr/bin/qemu-aarch64-static")
+		if readErr != nil {
+			return readErr
+		}
+		if err = os.WriteFile(dest, qemu, 0755); err != nil {
+			return err
+		}
+		defer os.Remove(dest)
+	} else if err != nil {
 		return err
 	}
-	defer os.Remove(dest)
 	resolv := filepath.Join(root, "etc/resolv.conf")
+	resolvInfo, _ := os.Lstat(resolv)
+	linkTarget := ""
+	if resolvInfo != nil && resolvInfo.Mode()&os.ModeSymlink != 0 {
+		linkTarget, _ = os.Readlink(resolv)
+	}
 	original, readErr := os.ReadFile(resolv)
 	host, hostErr := os.ReadFile("/etc/resolv.conf")
 	if hostErr == nil {
-		_ = os.Remove(resolv)
-		_ = os.WriteFile(resolv, host, 0644)
+		if err := os.Remove(resolv); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		if err := os.WriteFile(resolv, host, 0644); err != nil {
+			if linkTarget != "" {
+				_ = os.Symlink(linkTarget, resolv)
+			}
+			return err
+		}
 	}
 	defer func() {
 		if hostErr == nil {
 			_ = os.Remove(resolv)
-			if readErr == nil {
+			if linkTarget != "" {
+				_ = os.Symlink(linkTarget, resolv)
+			} else if readErr == nil {
 				_ = os.WriteFile(resolv, original, 0644)
 			}
 		}
@@ -161,14 +179,14 @@ func withChroot(ctx context.Context, root string, run func() error) error {
 	}()
 	for _, path := range []string{"proc", "sys", "dev", "dev/pts", "dev/shm"} {
 		mountpoint := filepath.Join(root, path)
-		if err = os.MkdirAll(mountpoint, 0755); err != nil {
+		if err := os.MkdirAll(mountpoint, 0755); err != nil {
 			return err
 		}
 		args := []string{"mount", "--bind", "/" + path, mountpoint}
 		if path == "proc" || path == "sys" {
 			args = []string{"mount", "-t", path, path, mountpoint}
 		}
-		if err = runner.Run(ctx, runner.Command{Args: args}, func(string) {}); err != nil {
+		if err := runner.Run(ctx, runner.Command{Args: args}, func(string) {}); err != nil {
 			return err
 		}
 		mounted = append(mounted, mountpoint)
@@ -226,7 +244,8 @@ serial=$(tr -d '\000' </sys/firmware/devicetree/base/serial-number 2>/dev/null |
 [ -n "$serial" ] || serial=$(od -An -N4 -tx1 /dev/urandom | tr -d ' ')
 suffix=$(printf '%s' "$serial" | tr -cd 'a-zA-Z0-9' | tail -c 6 | tr '[:upper:]' '[:lower:]')
 host=PREFIX-$suffix
-hostnamectl set-hostname "$host"
+hostname "$host"
+printf '%s\n' "$host" > /etc/hostname
 sed -i '/^127\.0\.1\.1[[:space:]]/d' /etc/hosts
 printf '127.0.1.1\t%s\n' "$host" >> /etc/hosts
 mkdir -p /var/lib

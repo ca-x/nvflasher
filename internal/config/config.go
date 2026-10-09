@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"nvflasher/internal/tegra"
 )
 
 type Proxy struct {
@@ -13,11 +15,26 @@ type Proxy struct {
 	RememberCredentials bool   `json:"rememberCredentials"`
 }
 type Config struct {
-	L4T         string `json:"l4t"`
-	Workspace   string `json:"workspace"`
-	DownloadDir string `json:"downloadDir"`
-	LogLimit    int    `json:"logLimit"`
-	Proxy       Proxy  `json:"proxy"`
+	L4T         string         `json:"l4t"`
+	Workspace   string         `json:"workspace"`
+	DownloadDir string         `json:"downloadDir"`
+	LogLimit    int            `json:"logLimit"`
+	Proxy       Proxy          `json:"proxy"`
+	Flash       *tegra.Options `json:"flash,omitempty"`
+	Provision   *ProvisionForm `json:"provision,omitempty"`
+}
+
+type ProvisionForm struct {
+	Username       string `json:"username"`
+	Hostname       string `json:"hostname"`
+	Autologin      bool   `json:"autologin"`
+	PublicKey      string `json:"publicKey"`
+	Packages       string `json:"packages"`
+	Script         string `json:"script"`
+	Overlay        string `json:"overlay"`
+	ClearKeys      bool   `json:"clearKeys"`
+	ClearMachineID bool   `json:"clearMachineId"`
+	FirstBoot      bool   `json:"firstBoot"`
 }
 
 func Path() (string, error) {

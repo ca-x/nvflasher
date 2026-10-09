@@ -153,7 +153,11 @@ func (m *Massflash) Generate(ctx context.Context, dir string, opts tegra.Options
 		return err
 	}
 	defer m.end()
-	return massflash.Generate(ctx, dir, opts, count, func(line string) { _ = lines.Send(line) })
+	if err := massflash.Generate(ctx, dir, opts, count, func(line string) { _ = lines.Send(line) }); err != nil {
+		return err
+	}
+	_ = lines.Send("MFI archive: " + filepath.Join(dir, "mfi_"+opts.Board+".tar.gz"))
+	return nil
 }
 func (m *Massflash) Flash(ctx context.Context, dir string, count int, show bool, lines *mygo.Channel[string]) error {
 	if err := requireHost(); err != nil {
@@ -325,6 +329,10 @@ func (d *Download) Start(ctx context.Context, request download.Request, events *
 func (d *Download) TestProxy(ctx context.Context, address string) error {
 	return download.TestProxy(ctx, address)
 }
+func (d *Download) TestProxyFor(ctx context.Context, address, target string) error {
+	return download.TestProxyFor(ctx, address, target)
+}
+func (d *Download) Show(path string) error { return download.Show(path) }
 func main() {
 	mygo.Bind(Environment{}, Devices{}, &Flash{}, &Massflash{}, &Provision{}, Recovery{}, &Download{})
 	mygo.App.WhenReady(func() {

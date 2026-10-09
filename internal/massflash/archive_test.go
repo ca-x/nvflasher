@@ -6,7 +6,10 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"nvflasher/internal/tegra"
 )
 
 func TestPrepare(t *testing.T) {
@@ -36,5 +39,26 @@ func TestPrepare(t *testing.T) {
 		} else if err != nil || filepath.Base(result) != "mfi_orin" {
 			t.Fatalf("result %q, error %v", result, err)
 		}
+	}
+}
+
+func TestGenerateArgumentOrder(t *testing.T) {
+	dir := t.TempDir()
+	tool := filepath.Join(dir, "tools/kernel_flash/l4t_initrd_flash.sh")
+	if err := os.MkdirAll(filepath.Dir(tool), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(tool, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > args.txt\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := Generate(context.Background(), dir, tegra.Presets[0].Options, 5, func(string) {}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "args.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "--no-flash\n--massflash\n5\njetson-orin-nano-devkit-super\ninternal\n") {
+		t.Fatalf("incorrect argument order: %s", data)
 	}
 }

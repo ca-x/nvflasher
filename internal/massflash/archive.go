@@ -73,7 +73,7 @@ func Prepare(ctx context.Context, archive, workspace string) (string, error) {
 			if createErr != nil {
 				return "", createErr
 			}
-			_, err = io.Copy(output, reader)
+			_, err = io.Copy(output, &cancellableReader{ctx: ctx, reader: reader})
 			closeErr := output.Close()
 			if err != nil {
 				return "", err
@@ -115,4 +115,16 @@ func Prepare(ctx context.Context, archive, workspace string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("archive does not contain an extracted MFI flash tool")
+}
+
+type cancellableReader struct {
+	ctx    context.Context
+	reader io.Reader
+}
+
+func (source *cancellableReader) Read(buffer []byte) (int, error) {
+	if err := source.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return source.reader.Read(buffer)
 }
