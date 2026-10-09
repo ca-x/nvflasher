@@ -114,10 +114,16 @@ func Run(ctx context.Context, dir string, o Options, emit func(string)) error {
 		}
 	}
 	if o.ClearMachineID {
+		if err = safeTarget(root, filepath.Join(root, "etc/machine-id")); err != nil {
+			return err
+		}
 		if err = os.WriteFile(filepath.Join(root, "etc/machine-id"), nil, 0644); err != nil {
 			return err
 		}
 		dbus := filepath.Join(root, "var/lib/dbus/machine-id")
+		if err = safeParent(root, dbus); err != nil {
+			return err
+		}
 		_ = os.Remove(dbus)
 		if err = os.Symlink("/etc/machine-id", dbus); err != nil {
 			return err
@@ -130,6 +136,9 @@ func Run(ctx context.Context, dir string, o Options, emit func(string)) error {
 }
 func withChroot(ctx context.Context, root string, run func() error) error {
 	dest := filepath.Join(root, "usr/bin/qemu-aarch64-static")
+	if err := safeTarget(root, dest); err != nil {
+		return err
+	}
 	if _, err := os.Stat(dest); os.IsNotExist(err) {
 		qemu, readErr := os.ReadFile("/usr/bin/qemu-aarch64-static")
 		if readErr != nil {
@@ -219,7 +228,13 @@ func installKey(root, user, path string) error {
 	if err = os.MkdirAll(folder, 0700); err != nil {
 		return err
 	}
+	if err = safeTarget(root, folder); err != nil {
+		return err
+	}
 	dest := filepath.Join(folder, "authorized_keys")
+	if err = safeTarget(root, dest); err != nil {
+		return err
+	}
 	old, _ := os.ReadFile(dest)
 	if !strings.Contains(string(old), strings.TrimSpace(string(key))) {
 		file, e := os.OpenFile(dest, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
@@ -257,6 +272,9 @@ func installFirstBoot(root, prefix string) error {
 	if err := os.MkdirAll(filepath.Dir(script), 0755); err != nil {
 		return err
 	}
+	if err := safeTarget(root, script); err != nil {
+		return err
+	}
 	if err := os.WriteFile(script, []byte(strings.Replace(firstBoot, "PREFIX", prefix, 1)), 0755); err != nil {
 		return err
 	}
@@ -276,6 +294,9 @@ WantedBy=multi-user.target
 	if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 		return err
 	}
+	if err := safeTarget(root, target); err != nil {
+		return err
+	}
 	if err := os.WriteFile(target, []byte(unit), 0644); err != nil {
 		return err
 	}
@@ -283,6 +304,41 @@ WantedBy=multi-user.target
 	if err := os.MkdirAll(filepath.Dir(link), 0755); err != nil {
 		return err
 	}
+	if err := safeParent(root, link); err != nil {
+		return err
+	}
 	_ = os.Remove(link)
 	return os.Symlink("../jetson-firstboot.service", link)
+}
+
+func safeParent(root, destination string) error {
+	realRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		return err
+	}
+	realParent, err := filepath.EvalSymlinks(filepath.Dir(destination))
+	if err != nil {
+		return err
+	}
+	if realParent != realRoot && !strings.HasPrefix(realParent, realRoot+string(filepath.Separator)) {
+		return fmt.Errorf("rootfs path escapes target: %s", destination)
+	}
+	return nil
+}
+
+func safeTarget(root, destination string) error {
+	if err := safeParent(root, destination); err != nil {
+		return err
+	}
+	info, err := os.Lstat(destination)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing to overwrite symlink: %s", destination)
+	}
+	return nil
 }

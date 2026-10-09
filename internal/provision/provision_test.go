@@ -1,9 +1,31 @@
 package provision
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestRejectHostSymlink(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "etc"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "machine-id"), filepath.Join(root, "etc/machine-id")); err != nil {
+		t.Fatal(err)
+	}
+	if err := safeTarget(root, filepath.Join(root, "etc/machine-id")); err == nil {
+		t.Fatal("host symlink accepted")
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "escape")); err != nil {
+		t.Fatal(err)
+	}
+	if err := safeTarget(root, filepath.Join(root, "escape", "file")); err == nil {
+		t.Fatal("escaped parent accepted")
+	}
+}
 
 func TestSteps(t *testing.T) {
 	steps, err := Steps("/tmp/L4T", Options{Username: "dev", Hostname: "jetson", Password: "sensitive-password", Packages: "curl htop", Script: "echo ok"})
