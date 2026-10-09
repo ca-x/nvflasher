@@ -24,6 +24,17 @@ bun run build
 
 The Linux bundle is placed in `build/`. To work on the UI, run `mygo dev` in a graphical session. Cross-platform builds depend on the corresponding MyGo packaging toolchains.
 
+## Build and release
+
+On Linux, build both installation packages with:
+
+```sh
+bun run build -- -platform linux/amd64
+bun run build -- -platform linux/arm64
+```
+
+Each `build/linux-<arch>/` directory contains a `.deb` and `.tar.gz` package. GitHub Actions uploads them as `nvflasher-linux-amd64` and `nvflasher-linux-arm64` artifacts after every CI build (including manual `workflow_dispatch` runs). Pushing a `v*` tag also publishes both architectures' packages to a GitHub Release after tests pass.
+
 ## Usage and safety
 
 On a Linux x86_64 host, extract the NVIDIA BSP and sample rootfs into `Linux_for_Tegra`, run `apply_binaries.sh`, and provide its directory under Settings. Install host dependencies as reported by Environment. Start nvflasher with root permissions (`pkexec` or `sudo`) when flashing or provisioning; connect the Jetson via USB in forced Recovery mode. The app only executes NVIDIA's official tools. For MFI flash, supply an extracted MFI directory or a `.tar.gz` archive (safely extracted into the workspace); MFI generation produces `mfi_<board>.tar.gz` in the BSP directory. Only identical hardware should be flashed together.

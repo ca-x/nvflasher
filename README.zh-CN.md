@@ -24,6 +24,17 @@ bun run build
 
 生成的 Linux 程序包位于 `build/`。图形环境下可用 `mygo dev` 开发。跨平台构建需要目标平台对应的 MyGo 工具链。
 
+## 构建与发布
+
+在 Linux 上分别构建两种架构的安装包：
+
+```sh
+bun run build -- -platform linux/amd64
+bun run build -- -platform linux/arm64
+```
+
+每个 `build/linux-<arch>/` 目录包含 `.deb` 和 `.tar.gz` 包。GitHub Actions 每次运行 CI（包括手动 `workflow_dispatch`）都会上传 `nvflasher-linux-amd64` 和 `nvflasher-linux-arm64` artifacts。推送 `v*` tag 且测试通过后，还会将两种架构的包发布到 GitHub Release。
+
 ## 使用与风险
 
 在 Linux x86_64 主机上下载并解压 NVIDIA BSP、sample rootfs，执行 `apply_binaries.sh`，在设置中指定 `Linux_for_Tegra` 目录；按环境检测提示安装依赖。刷机或预置时通过 `pkexec` 或 `sudo` 以 root 权限启动；确保设备通过 USB 进入 Recovery 模式。批量刷机可选择已解压的 MFI 目录或 `.tar.gz` 压缩包（安全解压到工作目录），并确保设备硬件版本一致。
