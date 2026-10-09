@@ -1,6 +1,6 @@
 # nvflasher
 
-<p align="center"><img src="assets/logo.png" alt="nvflasher" width="720"></p>
+<p align="center"><img src="assets/logo.png" alt="nvflasher" width="400"></p>
 
 nvflasher v0.1.0 is a MyGo desktop app for preparing and flashing NVIDIA Jetson devices, with Orin Nano Super defaults. It wraps NVIDIA's official Linux for Tegra scripts; it does **not** implement a flashing protocol.
 

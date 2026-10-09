@@ -1,6 +1,6 @@
 # nvflasher
 
-<p align="center"><img src="assets/logo.png" alt="nvflasher" width="720"></p>
+<p align="center"><img src="assets/logo.png" alt="nvflasher" width="400"></p>
 
 nvflasher v0.1.0 基于 MyGo 构建，重点支持 Jetson Orin Nano Super。它调用 NVIDIA 官方 Linux for Tegra 脚本，不自行实现刷机协议。
 
