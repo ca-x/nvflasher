@@ -82,23 +82,48 @@ func (Environment) RestartWithSudo(password string) error {
 	if err := authenticateSudo(password); err != nil {
 		return err
 	}
-	preserve := "--preserve-env=DISPLAY,WAYLAND_DISPLAY,XDG_RUNTIME_DIR,DBUS_SESSION_BUS_ADDRESS,XAUTHORITY"
-	if err := exec.Command("sudo", "-n", preserve, "--", "true").Run(); err != nil {
-		return fmt.Errorf("sudo could not preserve the graphical session: %w", err)
+	ready, err := os.CreateTemp("", "nvflasher-ready-")
+	if err != nil {
+		return err
 	}
-	cmd := exec.Command("sudo", "-n", preserve, "--", self)
+	defer os.Remove(ready.Name())
+	if err := ready.Close(); err != nil {
+		return err
+	}
+	preserve := "--preserve-env=DISPLAY,WAYLAND_DISPLAY,XDG_RUNTIME_DIR,DBUS_SESSION_BUS_ADDRESS,XAUTHORITY,NVFLASHER_READY_FILE"
+	cmd := exec.Command("systemd-run", "--user", "--scope", fmt.Sprintf("--unit=nvflasher-root-%d", time.Now().UnixNano()), "sudo", "-S", "-p", "", preserve, "--", self)
+	cmd.Env = append(os.Environ(), "NVFLASHER_READY_FILE="+ready.Name())
+	cmd.Stdin = strings.NewReader(password + "\n")
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("could not start elevated application: %w", err)
 	}
 	finished := make(chan error, 1)
 	go func() { finished <- cmd.Wait() }()
-	select {
-	case err := <-finished:
-		return fmt.Errorf("elevated application exited before opening: %v", err)
-	case <-time.After(time.Second):
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	timeout := time.NewTimer(15 * time.Second)
+	defer timeout.Stop()
+	for {
+		select {
+		case err := <-finished:
+			return fmt.Errorf("elevated application exited before opening: %v: %s", err, runner.Redact(stderr.String()))
+		case <-timeout.C:
+			return fmt.Errorf("elevated application did not open within 15 seconds; original window remains open")
+		case <-ticker.C:
+			info, err := os.Stat(ready.Name())
+			if err == nil && info.Size() > 0 {
+				select {
+				case err := <-finished:
+					return fmt.Errorf("elevated application exited before opening: %v: %s", err, runner.Redact(stderr.String()))
+				default:
+				}
+				mygo.App.Quit()
+				return nil
+			}
+		}
 	}
-	mygo.App.Quit()
-	return nil
 }
 
 func authenticateSudo(password string) error {
@@ -382,8 +407,8 @@ type Download struct{ operation }
 
 type Setup struct{ operation }
 
-func (Setup) Models() []setup.Model { return setup.Models() }
-func (Setup) Location(modelID, directory string) (string, error) {
+func (*Setup) Models() []setup.Model { return setup.Models() }
+func (*Setup) Location(modelID, directory string) (string, error) {
 	return setup.Location(modelID, directory)
 }
 
@@ -427,6 +452,11 @@ func main() {
 	mygo.Bind(Environment{}, Devices{}, &Flash{}, &Massflash{}, &Provision{}, Recovery{}, &Download{}, &Setup{})
 	mygo.App.WhenReady(func() {
 		mygo.NewWindow(mygo.WindowOptions{Title: "nvflasher", Width: 1120, Height: 760, MinWidth: 780, MinHeight: 560, BackgroundColor: "#101820", StateKey: "main", URL: "/"})
+		if os.Geteuid() == 0 && os.Getenv("NVFLASHER_READY_FILE") != "" {
+			if err := os.WriteFile(os.Getenv("NVFLASHER_READY_FILE"), []byte("ready"), 0600); err != nil {
+				log.Printf("could not signal elevated window readiness: %v", err)
+			}
+		}
 	})
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)

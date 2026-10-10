@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"nvflasher/internal/download"
 	"nvflasher/internal/runner"
@@ -154,6 +155,9 @@ func prepare(ctx context.Context, model Model, directory string, emit func(strin
 		emit("Reusing extracted sample rootfs")
 	}
 	emit("Applying NVIDIA binaries")
+	if err := removeStaleDeviceNodes(rootfs, emit); err != nil {
+		return "", err
+	}
 	if err := runner.Run(ctx, runner.Command{Dir: l4t, Args: []string{"./apply_binaries.sh"}, Env: []string{"PATH=/usr/local/sbin:/usr/sbin:/sbin:" + os.Getenv("PATH")}}, emit); err != nil {
 		return "", err
 	}
@@ -163,6 +167,45 @@ func prepare(ctx context.Context, model Model, directory string, emit func(strin
 		}
 	}
 	return l4t, nil
+}
+
+func removeStaleDeviceNodes(rootfs string, emit func(string)) error {
+	for _, directory := range []string{rootfs, filepath.Join(rootfs, "dev")} {
+		info, err := os.Lstat(directory)
+		if directory != rootfs && os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("refusing to use unexpected rootfs device directory %s", directory)
+		}
+	}
+	for _, name := range []string{"random", "urandom", "null", "zero"} {
+		path := filepath.Join(rootfs, "dev", name)
+		info, err := os.Lstat(path)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		host, err := os.Stat(filepath.Join("/dev", name))
+		if err != nil {
+			return err
+		}
+		device, valid := info.Sys().(*syscall.Stat_t)
+		hostDevice, hostValid := host.Sys().(*syscall.Stat_t)
+		if !valid || !hostValid || info.Mode()&os.ModeCharDevice == 0 || info.Mode()&os.ModeSymlink != 0 || device.Rdev != hostDevice.Rdev {
+			return fmt.Errorf("refusing to replace unexpected rootfs device node %s", path)
+		}
+		if err := os.Remove(path); err != nil {
+			return fmt.Errorf("remove stale rootfs device node %s: %w", path, err)
+		}
+		emit("Removed stale rootfs device node: " + name)
+	}
+	return nil
 }
 
 func fileExists(path string) bool {

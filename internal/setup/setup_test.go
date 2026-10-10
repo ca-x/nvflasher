@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -140,5 +141,71 @@ func TestVerifyArchive(t *testing.T) {
 	}
 	if err := verify(path, strings.Repeat("0", 40)); err == nil {
 		t.Fatal("corrupt archive accepted")
+	}
+}
+
+func TestRemoveStaleDeviceNodesRefusesUnexpectedFiles(t *testing.T) {
+	rootfs := t.TempDir()
+	dev := filepath.Join(rootfs, "dev")
+	if err := os.Mkdir(dev, 0755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dev, "random")
+	if err := os.WriteFile(path, []byte("keep"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := removeStaleDeviceNodes(rootfs, func(string) {}); err == nil {
+		t.Fatal("unexpected regular file was silently removed")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("unexpected file removed: %v", err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("/dev/random", path); err != nil {
+		t.Fatal(err)
+	}
+	if err := removeStaleDeviceNodes(rootfs, func(string) {}); err == nil {
+		t.Fatal("unexpected symlink was silently removed")
+	}
+	if err := os.RemoveAll(dev); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("/dev", dev); err != nil {
+		t.Fatal(err)
+	}
+	if err := removeStaleDeviceNodes(rootfs, func(string) {}); err == nil {
+		t.Fatal("symlinked device directory was silently accepted")
+	}
+}
+
+func TestRemoveStaleDeviceNodesAllowsRetry(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("creating device nodes requires root")
+	}
+	rootfs := t.TempDir()
+	dev := filepath.Join(rootfs, "dev")
+	if err := os.Mkdir(dev, 0755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dev, "random")
+	host, err := os.Stat("/dev/random")
+	if err != nil {
+		t.Fatal(err)
+	}
+	device := host.Sys().(*syscall.Stat_t)
+	if err := syscall.Mknod(path, syscall.S_IFCHR|0666, int(device.Rdev)); err != nil {
+		t.Skipf("creating device nodes unavailable: %v", err)
+	}
+	var events []string
+	if err := removeStaleDeviceNodes(rootfs, func(line string) { events = append(events, line) }); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Lstat(path); !os.IsNotExist(err) {
+		t.Fatalf("stale node still present: %v", err)
+	}
+	if len(events) != 1 || !strings.Contains(events[0], "random") {
+		t.Fatalf("missing removal feedback: %v", events)
 	}
 }
