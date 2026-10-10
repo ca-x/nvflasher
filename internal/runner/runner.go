@@ -22,7 +22,25 @@ type Command struct {
 	Env   []string
 }
 
-func Run(ctx context.Context, spec Command, emit func(string)) error {
+func Run(ctx context.Context, spec Command, emit func(string)) (result error) {
+	if loggingEnabled.Load() {
+		logger, file, err := commandLog()
+		if err != nil {
+			emit(fmt.Sprintf("Cannot write diagnostic log: %v", err))
+		} else {
+			defer file.Close()
+			logger.Info("command started", "command", Redact(strings.Join(spec.Args, " ")), "directory", spec.Dir)
+			emit("Diagnostic log: " + file.Name())
+			original := emit
+			emit = func(line string) {
+				if loggingEnabled.Load() {
+					logger.Info("output", "line", Redact(line))
+				}
+				original(line)
+			}
+			defer func() { logger.Info("command ended", "error", result) }()
+		}
+	}
 	if len(spec.Args) == 0 {
 		return fmt.Errorf("empty command")
 	}

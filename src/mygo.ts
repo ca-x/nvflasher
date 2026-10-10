@@ -174,6 +174,9 @@ export const Environment = {
   saveConfig(value: Config): Promise<void> {
     return call("Environment.SaveConfig", value);
   },
+  setLogging(enabled: boolean): Promise<void> {
+    return call("Environment.SetLogging", enabled);
+  },
 } as const;
 
 export const Devices = {

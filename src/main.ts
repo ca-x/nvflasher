@@ -26,7 +26,7 @@ const t = (text: string) => translate(text, language);
 let statusText = "Ready";
 function status(text: string) { statusText = text; $("#status").textContent = t(text); }
 function localizeUI() { localize(document.body, language); status(statusText); document.documentElement.lang = language; }
-function log(message: string) { lines.push(message); if (lines.length > (config.logLimit || 5000)) lines.shift(); const el = $("#log"); el.textContent = lines.join("\n"); if ($<HTMLInputElement>("#autoscroll").checked) el.scrollTop = el.scrollHeight; }
+function log(message: string) { if (document.querySelector<HTMLInputElement>("#diagnostic-log")?.checked) message = `[${new Date().toISOString()}] ${message}`; lines.push(message); if (lines.length > (config.logLimit || 5000)) lines.shift(); const el = $("#log"); el.textContent = lines.join("\n"); if ($<HTMLInputElement>("#autoscroll").checked) el.scrollTop = el.scrollHeight; }
 function fail(error: unknown) { const message = error instanceof Error ? error.message : String(error); status("Failed"); log("ERROR: " + message); }
 function val(id: string) { return $<HTMLInputElement>("#" + id).value.trim(); }
 function check(id: string) { return $<HTMLInputElement>("#" + id).checked; }
@@ -127,9 +127,9 @@ function recoveryGuide() {
     <p class="hint">${t("USB ID alone does not verify the board model. Confirm the hardware label and selected model before flashing.")} <a href="https://docs.nvidia.com/jetson/archives/r36.4.3/DeveloperGuide/IN/QuickStart.html#to-determine-whether-the-developer-kit-is-in-force-recovery-mode" target="_blank" rel="noopener noreferrer">${t("NVIDIA recovery instructions")}</a></p>
   </section>`;
 }
-function flashForm() { return `<div class="card"><h3>Target configuration</h3><div class="grid"><label>Board preset<select id="preset"><option value="">Custom</option></select></label><label>Board<input id="board" value="${safe(flashOptions.board)}" list="boards"/><datalist id="boards"></datalist></label><label>External device<input id="device" value="${safe(flashOptions.device)}"/></label><label>NVMe layout XML<input id="nvme" value="${safe(flashOptions.nvme)}"/></label><label>QSPI layout XML<input id="qspi" value="${safe(flashOptions.qspi)}"/></label><label class="check"><input id="erase" type="checkbox" ${flashOptions.erase ? "checked" : ""}/> Erase all storage</label><label class="check"><input id="showLogs" type="checkbox" ${flashOptions.showLogs ? "checked" : ""}/> Detailed logs</label></div><p class="hint">rootdev: internal · network: usb0 · Erase all destroys target data.</p></div>`; }
+function flashForm() { return `<div class="card"><h3>Target configuration</h3><div class="grid"><label>Board preset<select id="preset"><option value="">Custom</option></select></label><label>Board<select id="board"><option value="${safe(flashOptions.board)}">${safe(flashOptions.board)}</option></select></label><label>External device<input id="device" value="${safe(flashOptions.device)}"/></label><label>NVMe layout XML<input id="nvme" value="${safe(flashOptions.nvme)}"/></label><label>QSPI layout XML<input id="qspi" value="${safe(flashOptions.qspi)}"/></label><label class="check"><input id="erase" type="checkbox" ${flashOptions.erase ? "checked" : ""}/> Erase all storage</label><label class="check"><input id="showLogs" type="checkbox" ${flashOptions.showLogs ? "checked" : ""}/> Detailed logs</label></div><p class="hint">rootdev: internal · network: usb0 · Erase all destroys target data.</p></div>`; }
 function readFlash() { flashOptions = { board: val("board"), device: val("device"), nvme: val("nvme"), qspi: val("qspi"), erase: check("erase"), showLogs: check("showLogs") }; }
-async function fillPresets() { const select = $<HTMLSelectElement>("#preset"); const presets = await Environment.presets(); for (const preset of presets) select.add(new Option(preset.name, preset.name)); select.value = matchingPresetName(presets, flashOptions); select.onchange = () => { const chosen = presets.find(preset => preset.name === select.value); if (chosen) { flashOptions = chosen.options; for (const key of ["board", "device", "nvme", "qspi"] as const) $<HTMLInputElement>("#" + key).value = chosen.options[key]; $<HTMLInputElement>("#erase").checked = chosen.options.erase; $<HTMLInputElement>("#showLogs").checked = chosen.options.showLogs; } }; const report = await Environment.detect(config.l4t); for (const board of report.boards) $("#boards").append(new Option(board)); }
+async function fillPresets() { const select = $<HTMLSelectElement>("#preset"); const presets = await Environment.presets(); for (const preset of presets) select.add(new Option(preset.name, preset.name)); select.value = matchingPresetName(presets, flashOptions); select.onchange = () => { const chosen = presets.find(preset => preset.name === select.value); if (chosen) { flashOptions = chosen.options; for (const key of ["board", "device", "nvme", "qspi"] as const) $<HTMLInputElement>("#" + key).value = chosen.options[key]; $<HTMLInputElement>("#erase").checked = chosen.options.erase; $<HTMLInputElement>("#showLogs").checked = chosen.options.showLogs; } }; const report = await Environment.detect(config.l4t); const boardSelect = $<HTMLSelectElement>("#board"); if (!boardSelect.isConnected) return; boardSelect.replaceChildren(); if (!report.boards.includes(flashOptions.board)) { const unavailable = new Option(`${flashOptions.board} — unavailable in this BSP`, flashOptions.board); unavailable.disabled = true; unavailable.selected = true; boardSelect.add(unavailable); } for (const board of report.boards) boardSelect.add(new Option(board, board, false, board === flashOptions.board)); boardSelect.onchange = () => { flashOptions.board = boardSelect.value; select.value = matchingPresetName(presets, flashOptions); }; }
 function render() {
   queueMicrotask(localizeUI);
   const nav = $("#nav");
@@ -201,10 +201,11 @@ function render() {
       $<HTMLButtonElement>("#resume-setup").hidden = missing.length === 0;
       hint.classList.toggle("warning", missing.length > 0 || missingAbootimg);
       hint.classList.toggle("hint", missing.length === 0 && !missingAbootimg);
-      start.disabled = !host.host || !host.root || !recoveryReady || missing.length > 0 || missingAbootimg;
+      start.dataset.bspReady = String(missing.length === 0 && !missingAbootimg);
+      start.disabled = running || !host.host || !host.root || !devices.some(device => device.mode === "recovery") || missing.length > 0 || missingAbootimg;
     }).catch(fail);
     void fillPresets().catch(fail);
-    $("#start").onclick = () => void (async () => { readFlash(); if (!await confirmDanger(flashOptions.erase ? "ERASE ALL enabled. Wipe the connected Jetson?" : "Start flashing the connected Jetson?")) return; await stream(channel => Flash.start(config.l4t, flashOptions, channel), log); })().catch(fail);
+    $("#start").onclick = () => void (async () => { if (running) return; readFlash(); devices = await Devices.list(); if (!devices.some(device => device.mode === "recovery")) { log("重试需要 Force Recovery 设备：请让 Jetson 重新进入 Recovery，无需重启软件。"); render(); return; } if (!await confirmDanger(flashOptions.erase ? "ERASE ALL enabled. Wipe the connected Jetson?" : "Start flashing the connected Jetson?")) return; log(`[${new Date().toISOString()}] Flash start: ${JSON.stringify(flashOptions)}; USB: ${JSON.stringify(devices)}`); await stream(channel => Flash.start(config.l4t, flashOptions, channel), log); log(`[${new Date().toISOString()}] Flash task ended; retry is available after entering Force Recovery.`); })().catch(fail);
     $("#cancel").onclick = () => void Flash.cancel().catch(fail);
   }
   if (page === "Massflash") {
@@ -292,10 +293,18 @@ async function setupProvision() {
   $("#run").onclick = () => void (async () => { config.l4t = val("provision-l4t"); await Environment.saveConfig(config); provisionOptions = { username: val("username"), hostname: val("hostname"), password: password.value, publicKey: val("publicKey"), overlay: val("overlay"), autologin: check("autologin"), packages: val("packages"), script: $<HTMLTextAreaElement>("#script").value, clearKeys: check("clearKeys"), clearMachineId: check("clearMachineId"), firstBoot: check("firstBoot") }; if (!await Environment.confirm(t("Please confirm"), t("Run rootfs provisioning?"), `${t("Full chroot script:")}\n${provisionOptions.script || t("(none)")}`, t("Cancel"), t("Continue"))) return; await stream(channel => Provision.run(config.l4t, provisionOptions, channel), log); })().catch(fail);
   $("#cancel").onclick = () => void Provision.cancel().catch(fail);
 }
+const diagnosticLabel = document.createElement("label");
+diagnosticLabel.className = "check";
+diagnosticLabel.innerHTML = '<input id="diagnostic-log" type="checkbox" checked/> 写入诊断日志（软件目录/logs）';
+$("#copy").parentElement?.append(diagnosticLabel);
+const diagnosticToggle = $<HTMLInputElement>("#diagnostic-log");
+diagnosticToggle.checked = localStorage.getItem("nvflasher-diagnostic-log") !== "false";
+diagnosticToggle.onchange = () => { localStorage.setItem("nvflasher-diagnostic-log", String(diagnosticToggle.checked)); void Environment.setLogging(diagnosticToggle.checked).catch(fail); };
+await Environment.setLogging(diagnosticToggle.checked);
 $("#copy").onclick = () => void navigator.clipboard.writeText(lines.join("\n")).catch(fail);
 $("#save").onclick = () => { const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/plain" })); link.download = "nvflasher.log"; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 1000); };
 $("#hide").onclick = () => { $("#drawer").classList.toggle("hidden"); $("#hide").textContent = t($("#drawer").classList.contains("hidden") ? "Show" : "Hide"); };
-events.devicesChanged.on(next => { const changed = JSON.stringify(devices) !== JSON.stringify(next); devices = next; $("#device-count").textContent = `${devices.filter(device => device.mode === "recovery").length} ${t("recovery devices")}`; if (changed && (page === "Devices" || page === "Flash" || page === "Massflash")) render(); });
+events.devicesChanged.on(next => { const changed = JSON.stringify(devices) !== JSON.stringify(next); devices = next; $("#device-count").textContent = `${devices.filter(device => device.mode === "recovery").length} ${t("recovery devices")}`; if (changed) log(`[${new Date().toISOString()}] USB changed: ${JSON.stringify(next)}`); if (page === "Flash") { const start = document.querySelector<HTMLButtonElement>("#start"); if (start) start.disabled = running || !host.host || !host.root || start.dataset.bspReady !== "true" || !devices.some(device => device.mode === "recovery"); } else if (changed && !running && (page === "Devices" || page === "Massflash")) render(); });
 const languageSelect = $<HTMLSelectElement>("#language");
 languageSelect.value = language;
 languageSelect.onchange = () => {

@@ -27,6 +27,8 @@ import (
 
 type Environment struct{}
 
+func (Environment) SetLogging(enabled bool) { runner.SetLogging(enabled) }
+
 func (Environment) Detect(dir string) tegra.Report  { return tegra.Inspect(dir) }
 func (Environment) Capabilities() capability.Status { return capability.Detect() }
 func (Environment) InstallPlan() (capability.InstallPlan, error) {
