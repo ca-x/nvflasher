@@ -218,6 +218,21 @@ func requireReady(dir string) error {
 
 type Flash struct{ operation }
 
+func (f *Flash) CleanupImages(ctx context.Context, dir string, lines *mygo.Channel[string]) error {
+	if err := requireHost(); err != nil {
+		return err
+	}
+	if dir == "" {
+		return fmt.Errorf("select a BSP directory first")
+	}
+	ctx, err := f.begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer f.end()
+	return flash.CleanupImages(ctx, dir, func(line string) { _ = lines.Send(line) })
+}
+
 func (f *Flash) Start(ctx context.Context, dir string, opts tegra.Options, lines *mygo.Channel[string]) error {
 	if err := requireReady(dir); err != nil {
 		return err

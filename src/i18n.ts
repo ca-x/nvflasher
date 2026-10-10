@@ -1,6 +1,8 @@
 export type Language = "en" | "zh-CN";
 
 export const messages: Record<string, string> = {
+  "Check and clean image resources": "检查并清理镜像占用",
+  "Only idle BSP image mounts will be unmounted and detached. Busy resources are refused. No images are deleted and flashing will not start.": "仅安全卸载并解绑空闲的 BSP 镜像；发现占用将拒绝清理。不删除镜像，也不会开始刷机。",
   "Language": "语言", "JETSON WORKSTATION · v0.1.1": "JETSON 工作站 · v0.1.1",
   "Official NVIDIA toolchain wrapper": "NVIDIA 官方工具链界面",
   "Environment": "环境检测", "Devices": "设备", "Flash": "刷写", "Massflash": "批量刷写",

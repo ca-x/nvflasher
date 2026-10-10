@@ -20,6 +20,9 @@ func Run(ctx context.Context, dir string, opts tegra.Options, emit func(string))
 	if info, err := os.Stat(filepath.Join(dir, opts.Board+".conf")); err != nil || !info.Mode().IsRegular() {
 		return fmt.Errorf("selected board configuration is unavailable in this BSP: %s.conf", opts.Board)
 	}
+	if err := cleanupStaleImage(ctx, dir, emit); err != nil {
+		return err
+	}
 	if err := checkImageLoops(ctx, dir); err != nil {
 		return err
 	}

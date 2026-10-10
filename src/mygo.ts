@@ -192,6 +192,9 @@ export const Flash = {
   cancel(): Promise<void> {
     return call("Flash.Cancel");
   },
+  cleanupImages(dir: string, lines: Channel<string>): Promise<void> {
+    return call("Flash.CleanupImages", dir, lines);
+  },
   start(dir: string, opts: Options, lines: Channel<string>): Promise<void> {
     return call("Flash.Start", dir, opts, lines);
   },
