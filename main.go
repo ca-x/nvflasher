@@ -57,6 +57,14 @@ func (Environment) Browse(ctx context.Context, directory bool) (string, error) {
 	}
 	return paths[0], nil
 }
+func (Environment) Confirm(ctx context.Context, title, message, detail, cancel, proceed string) (bool, error) {
+	result, err := mygo.Dialog.Message(mygo.MessageOptions{
+		Parent: mygo.CallerWindow(ctx), Type: mygo.MessageWarning,
+		Title: title, Message: message, Detail: detail,
+		Buttons: []string{cancel, proceed}, DefaultButton: 0, CancelButton: 0,
+	})
+	return err == nil && result.Button == 1, err
+}
 func (Environment) RestartAsRoot() error {
 	if runtime.GOOS != "linux" {
 		return fmt.Errorf("Linux only")
@@ -211,6 +219,9 @@ type Flash struct{ operation }
 func (f *Flash) Start(ctx context.Context, dir string, opts tegra.Options, lines *mygo.Channel[string]) error {
 	if err := requireReady(dir); err != nil {
 		return err
+	}
+	if _, err := exec.LookPath("abootimg"); err != nil {
+		return fmt.Errorf("missing abootimg on the host; see Environment for installation instructions: %w", err)
 	}
 	found := false
 	for _, device := range usbwatch.Scan("/sys/bus/usb/devices") {

@@ -10,9 +10,10 @@ import (
 )
 
 type InstallPlan struct {
-	Distribution string     `json:"distribution"`
-	Packages     []string   `json:"packages"`
-	Commands     [][]string `json:"commands"`
+	Distribution   string     `json:"distribution"`
+	Packages       []string   `json:"packages"`
+	Commands       [][]string `json:"commands"`
+	ManualCommands [][]string `json:"manualCommands"`
 }
 
 func DetectInstallPlan() (InstallPlan, error) {
@@ -48,8 +49,8 @@ func PlanFor(osRelease string, checks []tegra.Check) (InstallPlan, error) {
 	}
 	packagesByCheck := map[string]map[string]string{
 		"arch":   {"qemu-aarch64-static": "qemu-user-static", "aarch64 binfmt": "qemu-user-static-binfmt", "dpkg": "dpkg", "sshpass": "sshpass", "xmllint": "libxml2", "dtc": "dtc", "ssh-keygen": "openssh", "pkexec": "polkit", "NFS server": "nfs-utils"},
-		"debian": {"qemu-aarch64-static": "qemu-user-static", "aarch64 binfmt": "qemu-user-static-binfmt", "sshpass": "sshpass", "xmllint": "libxml2-utils", "dtc": "device-tree-compiler", "ssh-keygen": "openssh-client", "pkexec": "polkitd", "NFS server": "nfs-kernel-server"},
-		"ubuntu": {"qemu-aarch64-static": "qemu-user-static", "aarch64 binfmt": "qemu-user-static-binfmt", "sshpass": "sshpass", "xmllint": "libxml2-utils", "dtc": "device-tree-compiler", "ssh-keygen": "openssh-client", "pkexec": "polkitd", "NFS server": "nfs-kernel-server"},
+		"debian": {"qemu-aarch64-static": "qemu-user-static", "aarch64 binfmt": "qemu-user-static-binfmt", "abootimg": "abootimg", "sshpass": "sshpass", "xmllint": "libxml2-utils", "dtc": "device-tree-compiler", "ssh-keygen": "openssh-client", "pkexec": "polkitd", "NFS server": "nfs-kernel-server"},
+		"ubuntu": {"qemu-aarch64-static": "qemu-user-static", "aarch64 binfmt": "qemu-user-static-binfmt", "abootimg": "abootimg", "sshpass": "sshpass", "xmllint": "libxml2-utils", "dtc": "device-tree-compiler", "ssh-keygen": "openssh-client", "pkexec": "polkitd", "NFS server": "nfs-kernel-server"},
 	}
 	selected := map[string]bool{}
 	for _, check := range checks {
@@ -59,7 +60,14 @@ func PlanFor(osRelease string, checks []tegra.Check) (InstallPlan, error) {
 			}
 		}
 	}
-	plan := InstallPlan{Distribution: distribution, Packages: []string{}, Commands: [][]string{}}
+	plan := InstallPlan{Distribution: distribution, Packages: []string{}, Commands: [][]string{}, ManualCommands: [][]string{}}
+	if family == "arch" {
+		for _, check := range checks {
+			if check.Name == "abootimg" && check.Status == "warn" {
+				plan.ManualCommands = append(plan.ManualCommands, []string{"paru", "-S", "abootimg"})
+			}
+		}
+	}
 	for name := range selected {
 		plan.Packages = append(plan.Packages, name)
 	}

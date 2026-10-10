@@ -1,7 +1,7 @@
 export type Language = "en" | "zh-CN";
 
 export const messages: Record<string, string> = {
-  "Language": "语言", "JETSON WORKSTATION · v0.1.0": "JETSON 工作站 · v0.1.0",
+  "Language": "语言", "JETSON WORKSTATION · v0.1.1": "JETSON 工作站 · v0.1.1",
   "Official NVIDIA toolchain wrapper": "NVIDIA 官方工具链界面",
   "Environment": "环境检测", "Devices": "设备", "Flash": "刷写", "Massflash": "批量刷写",
   "Flash setup": "刷机向导", "Rootfs setup": "Rootfs 配置向导", "Step": "步骤", "of": "/",
@@ -53,6 +53,9 @@ export const messages: Record<string, string> = {
   "BSP ready": "BSP 已准备就绪", "Download complete. Restart with sudo, then select Extract and prepare BSP.": "下载完成。请用 sudo 重新启动，再选择“解压并准备 BSP”。",
   "Checking package requirements…": "正在检查软件依赖…", "System dependencies": "系统依赖",
   "No missing packages detected.": "未检测到缺失的软件包。", "Missing packages": "缺失的软件包",
+  "Arch: abootimg is an AUR package, not a pacman repository package. Install it as your regular user (never as root), then rerun diagnostics.": "Arch：abootimg 是 AUR 软件包，不在 pacman 官方仓库。请以普通用户身份安装（不要用 root），然后重新运行环境检测。",
+  "Copy AUR command": "复制 AUR 安装命令",
+  "Host is missing abootimg; see Environment for installation instructions.": "主机缺少 abootimg；请查看“环境检测”中的安装说明。",
   "Arch installation updates the entire system. NVIDIA does not certify Arch as a flashing host.": "Arch 安装会升级整个系统。NVIDIA 不认证 Arch 为刷写主机。",
   "Package installation changes the host system.": "安装软件包会修改主机系统。",
   "Copy install command": "复制安装命令", "Install missing packages": "安装缺失的软件包",
@@ -106,6 +109,7 @@ export const messages: Record<string, string> = {
   "Flash all connected matching devices?": "刷写所有已连接且型号匹配的设备吗？",
   "Run rootfs provisioning?": "执行 rootfs 预置吗？", "Full chroot script:": "完整 chroot 脚本：",
   "(none)": "（无）", "Reboot the device into Recovery mode?": "将设备重启到恢复模式吗？",
+  "Please confirm": "请确认", "Continue": "继续", "Delete selected template?": "删除所选模板吗？",
   "Enter Recovery mode and troubleshoot": "短接进入恢复模式与故障排查",
   "Recovery guide": "恢复模式指南",
   "These jumper steps apply to the official Jetson Orin Nano Developer Kit. Check your carrier board manual if its button header differs.": "以下短接步骤适用于官方 Jetson Orin Nano 开发套件；若载板排针不同，请先查阅该载板手册。",

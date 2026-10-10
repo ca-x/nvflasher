@@ -18,7 +18,7 @@ func Detect() Status {
 	if !s.Host {
 		return s
 	}
-	for _, name := range []string{"qemu-aarch64-static", "dpkg", "sshpass", "xmllint", "dtc", "ssh-keygen", "pkexec"} {
+	for _, name := range []string{"qemu-aarch64-static", "dpkg", "abootimg", "sshpass", "xmllint", "dtc", "ssh-keygen", "pkexec"} {
 		status, hint := "ok", "Ready"
 		if _, err := exec.LookPath(name); err != nil {
 			status, hint = "warn", "Install "+name+" using your distribution package manager"

@@ -2,7 +2,7 @@
 
 <p align="center"><img src="assets/logo.png" alt="nvflasher" width="400"></p>
 
-nvflasher v0.1.0 基于 MyGo 构建，重点支持 Jetson Orin Nano Super。它调用 NVIDIA 官方 Linux for Tegra 脚本，不自行实现刷机协议。
+nvflasher v0.1.1 基于 MyGo 构建，重点支持 Jetson Orin Nano Super。它调用 NVIDIA 官方 Linux for Tegra 脚本，不自行实现刷机协议。
 
 | 功能 | Linux x86_64 | Windows / macOS |
 | --- | --- | --- |
@@ -46,6 +46,10 @@ bun run build -- -platform linux/arm64
 如果 BSP 准备曾在安装依赖时中断，可在“下载”步骤点击“解压并准备 BSP”继续：应用会复用已校验的归档和已解压的内容，并在重新运行 `apply_binaries.sh` 前清理上次遗留、且设备编号符合预期的 rootfs 字符设备节点；不会删除普通文件或符号链接。通过界面输入 sudo 密码提权重启需要可用的 systemd 用户会话，其他环境可使用 `pkexec`。
 
 环境检测页可根据 Debian、Ubuntu 或 Arch（含 `ID_LIKE=arch` 的 Omarchy、EndeavourOS 等衍生版）列出缺失的软件包，复制安装命令，或在 root 界面确认后安装。Arch 上运行 `apply_binaries.sh` 需要主机安装 `dpkg`，应用会将其列入缺失依赖。Arch 安装使用 `pacman -Syu`，会升级整个系统；NVIDIA 并未认证 Arch 作为 Jetson Linux 刷写主机，安装依赖不代表刷写一定可用。
+
+刷写工具还需要主机安装 `abootimg`。Debian/Ubuntu 可在环境检测页通过系统包管理器安装；Arch 的 `abootimg` 在 AUR，不在 pacman 官方仓库，界面会提供 `paru -S abootimg` 的复制按钮，请在**普通用户**终端手动执行，不要使用 root 运行 AUR 构建。安装后重新运行环境检测。
+
+Arch 刷写时应用只在 NVIDIA 刷写子进程的环境中将 `service nfs-kernel-server` 映射到 systemd 的 `nfs-server.service`，不修改系统全局命令；其他服务调用会明确报错。需要主机安装 `nfs-utils`。危险操作和软件包安装使用 MyGo 原生确认对话框，模板名称直接在界面中输入，不再调用浏览器弹窗。
 
 主界面按“刷机向导”和“Rootfs 配置向导”组织；刷机向导依次进入环境检测、选择设备型号、下载与准备、刷写。刷写页可进入“已有 MFI 包”子界面，选择 MFI 目录或 `.tar.gz` 压缩包刷写；生成新 MFI 包的选项默认收起。单个 ISO 或任意 `.img` 文件不能直接作为 MFI 包刷写。
 

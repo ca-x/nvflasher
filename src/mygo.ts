@@ -40,6 +40,7 @@ export interface InstallPlan {
   distribution: string;
   packages: string[];
   commands: string[][];
+  manualCommands: string[][];
 }
 
 export interface Model {
@@ -145,6 +146,9 @@ export const Environment = {
   },
   capabilities(): Promise<Status> {
     return call("Environment.Capabilities");
+  },
+  confirm(title: string, message: string, detail: string, cancel: string, proceed: string): Promise<boolean> {
+    return call("Environment.Confirm", title, message, detail, cancel, proceed);
   },
   detect(dir: string): Promise<Report> {
     return call("Environment.Detect", dir);

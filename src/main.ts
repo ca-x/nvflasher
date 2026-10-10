@@ -31,7 +31,7 @@ function fail(error: unknown) { const message = error instanceof Error ? error.m
 function val(id: string) { return $<HTMLInputElement>("#" + id).value.trim(); }
 function check(id: string) { return $<HTMLInputElement>("#" + id).checked; }
 function safe(value: string) { return value.replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]!); }
-function confirmDanger(message: string) { return window.confirm(`${t(message)}\n\n${t("This operation may change or erase device data. Continue?")}`); }
+function confirmDanger(message: string) { return Environment.confirm(t("Please confirm"), t(message), t("This operation may change or erase device data. Continue?"), t("Cancel"), t("Continue")); }
 async function stream<T = string>(task: (channel: Channel<T>) => Promise<void>, output: (item: T) => void) { if (running) return; running = true; status("Running"); try { await task(new Channel<T>(output)); status("Completed"); log(t("Operation completed")); } catch (error) { fail(error); } finally { running = false; render(); } }
 function path(id: string, title: string, current: string, directory = true) { return `<label>${title}<span class="row"><input id="${id}" value="${safe(current)}"/><button type="button" data-path="${id}" data-dir="${directory}">Browse</button></span></label>`; }
 function shell(title: string, description: string, body: string) {
@@ -72,7 +72,21 @@ function shell(title: string, description: string, body: string) {
       const heading = document.createElement("h3");
       heading.textContent = `${t("System dependencies")} · ${plan.distribution}`;
       card.append(heading);
-      if (!plan.packages.length) { card.append(t("No missing packages detected.")); return; }
+      if (!plan.packages.length && !plan.manualCommands.length) { card.append(t("No missing packages detected.")); return; }
+      if (plan.manualCommands.length) {
+        const note = document.createElement("p");
+        note.className = "warning";
+        note.textContent = t("Arch: abootimg is an AUR package, not a pacman repository package. Install it as your regular user (never as root), then rerun diagnostics.");
+        const manual = plan.manualCommands.map(args => args.join(" ")).join(" && ");
+        const manualCode = document.createElement("pre");
+        manualCode.className = "package-command";
+        manualCode.textContent = manual;
+        const manualCopy = document.createElement("button");
+        manualCopy.textContent = t("Copy AUR command");
+        manualCopy.onclick = () => void navigator.clipboard.writeText(manual).catch(fail);
+        card.append(note, manualCode, manualCopy);
+      }
+      if (!plan.packages.length) return;
       const summary = document.createElement("p");
       summary.textContent = `${t("Missing packages")}: ${plan.packages.join(", ")}`;
       const commands = plan.commands.map(args => `sudo ${args.join(" ")}`).join(" && ");
@@ -91,7 +105,7 @@ function shell(title: string, description: string, body: string) {
       install.className = "primary";
       install.textContent = t("Install missing packages");
       install.disabled = !host.root;
-      install.onclick = () => { if (window.confirm(`${t("Install these packages on the host?")}\n\n${commands}\n\n${warning.textContent}`)) void stream(async channel => { await Environment.installDependencies(channel); host = await Environment.capabilities(); }, log); };
+      install.onclick = () => void (async () => { if (await Environment.confirm(t("Please confirm"), t("Install these packages on the host?"), `${commands}\n\n${warning.textContent}`, t("Cancel"), t("Continue"))) await stream(async channel => { await Environment.installDependencies(channel); host = await Environment.capabilities(); }, log); })().catch(fail);
       actions.append(copy, install);
       card.append(summary, code, warning, actions);
     }).catch(fail);
@@ -169,7 +183,7 @@ function render() {
   }
   $("#host").textContent = host.host ? `LINUX x86_64 · ${host.root ? "ROOT READY" : "ROOT REQUIRED"}` : "NON-LINUX FLASHING DISABLED";
   $("#device-count").textContent = `${devices.filter(device => device.mode === "recovery").length} ${t("recovery devices")}`;
-  if (page === "Environment") { shell("Environment", "Inspect your Linux for Tegra BSP and host dependencies.", `${gate()}<div class="card">${path("l4t", "Linux_for_Tegra directory", config.l4t)}<div class="actions"><button class="primary" id="detect">Run diagnostics</button><button id="root" ${!host.host || host.root ? "disabled" : ""}>Restart as root</button></div></div><div class="card" id="report">Run diagnostics to inspect BSP.</div>`); $("#detect").onclick = () => void (async () => { try { config.l4t = val("l4t"); await Environment.saveConfig(config); const report = await Environment.detect(config.l4t); const output = $("#report"); output.replaceChildren(); const heading = document.createElement("h3"); heading.textContent = report.version ? `${report.version} · ${report.boards.length} ${t("boards")}` : t("BSP not prepared — choose a model and download on the previous steps"); output.append(heading); for (const item of [...report.checks, ...host.checks]) { const row = document.createElement("div"); row.className = "report"; const name = document.createElement("span"); name.textContent = t(item.name); const hint = document.createElement("span"); hint.className = item.status; hint.textContent = translateCheck(item.status, item.hint, language); row.append(name, hint); output.append(row); } } catch (error) { fail(error); } })(); $("#root").onclick = () => void Environment.restartAsRoot().catch(fail); if (config.l4t) $<HTMLButtonElement>("#detect").click(); }
+  if (page === "Environment") { shell("Environment", "Inspect your Linux for Tegra BSP and host dependencies.", `${gate()}<div class="card">${path("l4t", "Linux_for_Tegra directory", config.l4t)}<div class="actions"><button class="primary" id="detect">Run diagnostics</button><button id="root" ${!host.host || host.root ? "disabled" : ""}>Restart as root</button></div></div><div class="card" id="report">Run diagnostics to inspect BSP.</div>`); $("#detect").onclick = () => void (async () => { try { config.l4t = val("l4t"); await Environment.saveConfig(config); host = await Environment.capabilities(); const report = await Environment.detect(config.l4t); const output = $("#report"); output.replaceChildren(); const heading = document.createElement("h3"); heading.textContent = report.version ? `${report.version} · ${report.boards.length} ${t("boards")}` : t("BSP not prepared — choose a model and download on the previous steps"); output.append(heading); for (const item of [...report.checks, ...host.checks]) { const row = document.createElement("div"); row.className = "report"; const name = document.createElement("span"); name.textContent = t(item.name); const hint = document.createElement("span"); hint.className = item.status; hint.textContent = translateCheck(item.status, item.hint, language); row.append(name, hint); output.append(row); } } catch (error) { fail(error); } })(); $("#root").onclick = () => void Environment.restartAsRoot().catch(fail); if (config.l4t) $<HTMLButtonElement>("#detect").click(); }
   if (page === "Devices") { shell("Devices", "Connected NVIDIA USB devices refresh every two seconds on Linux. Flashing requires Recovery mode.", `${gate()}<div class="card" id="device-list"></div><div class="card"><label>${t("Select device model")}<select id="model"><option value="">${t("Choose model…")}</option>${models.map(model => `<option value="${safe(model.id)}" ${model.id === modelID ? "selected" : ""}>${safe(model.name)}</option>`).join("")}</select></label><p class="hint">${t("USB ID alone does not identify the board. Confirm the model from the device label before flashing.")}</p></div>`); const output = $("#device-list"); output.textContent = devices.length ? "" : t("No NVIDIA USB devices found."); for (const device of devices) { const row = document.createElement("div"); row.className = "report"; row.textContent = `USB ${device.path} · 0955:${device.product} · ${t(device.mode)}${device.boardIds ? ` · ${t("L4T-README board IDs")}: ${device.boardIds}` : ""}${device.release ? ` · L4T ${device.release} (L4T-README)` : ""}`; output.append(row); } $<HTMLSelectElement>("#model").onchange = event => { modelID = (event.target as HTMLSelectElement).value; const chosen = models.find(model => model.id === modelID); if (chosen) flashOptions.board = chosen.board; localStorage.setItem("nvflasher-model", modelID); $<HTMLButtonElement>("#wizard-next").disabled = !modelID; }; }
   if (page === "Flash") {
     const recoveryReady = devices.some(device => device.mode === "recovery");
@@ -182,21 +196,22 @@ function render() {
       const start = document.querySelector<HTMLButtonElement>("#start");
       if (!hint || !start || page !== "Flash") return;
       const missing = report.checks.filter(item => item.status !== "ok");
-      hint.textContent = missing.length ? `${t("BSP preparation incomplete")}: ${missing.map(item => t(item.name)).join(", ")}${running ? ` · ${t("Preparation in progress; wait for completion")}` : ""}` : `${t("BSP ready")}: ${config.l4t}`;
+      const missingAbootimg = host.checks.some(item => item.name === "abootimg" && item.status !== "ok");
+      hint.textContent = missing.length ? `${t("BSP preparation incomplete")}: ${missing.map(item => t(item.name)).join(", ")}${running ? ` · ${t("Preparation in progress; wait for completion")}` : ""}` : missingAbootimg ? t("Host is missing abootimg; see Environment for installation instructions.") : `${t("BSP ready")}: ${config.l4t}`;
       $<HTMLButtonElement>("#resume-setup").hidden = missing.length === 0;
-      hint.classList.toggle("warning", missing.length > 0);
-      hint.classList.toggle("hint", missing.length === 0);
-      start.disabled = !host.host || !host.root || !recoveryReady || missing.length > 0;
+      hint.classList.toggle("warning", missing.length > 0 || missingAbootimg);
+      hint.classList.toggle("hint", missing.length === 0 && !missingAbootimg);
+      start.disabled = !host.host || !host.root || !recoveryReady || missing.length > 0 || missingAbootimg;
     }).catch(fail);
     void fillPresets().catch(fail);
-    $("#start").onclick = () => { readFlash(); if (!confirmDanger(flashOptions.erase ? "ERASE ALL enabled. Wipe the connected Jetson?" : "Start flashing the connected Jetson?")) return; void stream(channel => Flash.start(config.l4t, flashOptions, channel), log); };
+    $("#start").onclick = () => void (async () => { readFlash(); if (!await confirmDanger(flashOptions.erase ? "ERASE ALL enabled. Wipe the connected Jetson?" : "Start flashing the connected Jetson?")) return; await stream(channel => Flash.start(config.l4t, flashOptions, channel), log); })().catch(fail);
     $("#cancel").onclick = () => void Flash.cancel().catch(fail);
   }
   if (page === "Massflash") {
     shell("Flash MFI", "Flash a prebuilt MFI package or generate a new one from the BSP.", `${gate()}<div class="card"><h3>Prebuilt MFI package</h3><div class="grid">${path("mfi", "MFI directory or .tar.gz archive", config.workspace)}<label>Maximum devices<input id="count" type="number" value="1" min="1" max="64"/></label><label class="check"><input id="mfi-logs" type="checkbox" checked/> Detailed logs</label></div><p class="hint">Only flash devices matching the MFI hardware. Recovery USB is required.</p><div class="actions"><button class="primary" id="bulk" ${!host.host || !host.root || !devices.some(device => device.mode === "recovery") ? "disabled" : ""}>Flash MFI devices</button><button id="cancel">Cancel</button></div></div><details class="card"><summary>Generate new MFI package</summary><p class="hint">Offline generation may require BOARDID. Output: mfi_&lt;board&gt;.tar.gz.</p>${flashForm()}<div class="actions"><button id="start" ${!host.host || !host.root ? "disabled" : ""}>Generate MFI</button></div></details>`);
     void fillPresets().catch(fail);
-    $("#bulk").onclick = () => { if (!confirmDanger("Flash all connected matching devices?")) return; void stream(channel => Massflash.flash(val("mfi"), Number(val("count")), check("mfi-logs"), channel), log); };
-    $("#start").onclick = () => { readFlash(); if (!confirmDanger(flashOptions.erase ? "ERASE ALL enabled. Wipe the connected Jetson?" : "Generate a new MFI package?")) return; void stream(channel => Massflash.generate(config.l4t, flashOptions, Number(val("count")), channel), log); };
+    $("#bulk").onclick = () => void (async () => { if (!await confirmDanger("Flash all connected matching devices?")) return; await stream(channel => Massflash.flash(val("mfi"), Number(val("count")), check("mfi-logs"), channel), log); })().catch(fail);
+    $("#start").onclick = () => void (async () => { readFlash(); if (!await confirmDanger(flashOptions.erase ? "ERASE ALL enabled. Wipe the connected Jetson?" : "Generate a new MFI package?")) return; await stream(channel => Massflash.generate(config.l4t, flashOptions, Number(val("count")), channel), log); })().catch(fail);
     $("#cancel").onclick = () => void Massflash.cancel().catch(fail);
   }
   if (page === "Provision") {
@@ -205,7 +220,7 @@ function render() {
     $<HTMLInputElement>("#provision-l4t").oninput = () => { $<HTMLButtonElement>("#run").disabled = !host.root || !host.host || !val("provision-l4t"); };
     void setupProvision();
   }
-  if (page === "Recovery") { shell("SSH Recovery", "Reboot a running Jetson into forced recovery over SSH. Available on all platforms.", `${recoveryGuide()}<details class="card"><summary>${t("Enter Recovery via SSH")}</summary><p class="hint">${t("Requires a bootable device, SSH access and a trusted host key in ~/.ssh/known_hosts. Otherwise use FC REC + GND or RECOVERY + RESET.")}</p><div class="grid"><label>Host/IP<input id="ssh-host"/></label><label>Port<input id="port" value="22"/></label><label>Username<input id="user"/></label><label>SSH password<input id="ssh-pass" type="password"/></label><label>Sudo password (optional)<input id="sudo-pass" type="password"/></label></div><button class="primary" id="reboot">Request forced recovery</button></details>`); $("#reboot").onclick = () => { if (!confirmDanger("Reboot the device into Recovery mode?")) return; void Recovery.trigger({ host: val("ssh-host"), port: val("port"), user: val("user"), password: val("ssh-pass"), sudoPassword: val("sudo-pass") }).then(() => { log("Waiting for USB Recovery 0955:7X23"); openPage("Devices"); }).catch(fail); }; }
+  if (page === "Recovery") { shell("SSH Recovery", "Reboot a running Jetson into forced recovery over SSH. Available on all platforms.", `${recoveryGuide()}<details class="card"><summary>${t("Enter Recovery via SSH")}</summary><p class="hint">${t("Requires a bootable device, SSH access and a trusted host key in ~/.ssh/known_hosts. Otherwise use FC REC + GND or RECOVERY + RESET.")}</p><div class="grid"><label>Host/IP<input id="ssh-host"/></label><label>Port<input id="port" value="22"/></label><label>Username<input id="user"/></label><label>SSH password<input id="ssh-pass" type="password"/></label><label>Sudo password (optional)<input id="sudo-pass" type="password"/></label></div><button class="primary" id="reboot">Request forced recovery</button></details>`); $("#reboot").onclick = () => void (async () => { if (!await confirmDanger("Reboot the device into Recovery mode?")) return; await Recovery.trigger({ host: val("ssh-host"), port: val("port"), user: val("user"), password: val("ssh-pass"), sudoPassword: val("sudo-pass") }); log("Waiting for USB Recovery 0955:7X23"); openPage("Devices"); })().catch(fail); }
   if (page === "Download") {
     const model = models.find(item => item.id === modelID);
     shell("Download images", "Download the official BSP (including flash tools) and rootfs for the selected model.", `<div class="card"><h3>${model ? safe(model.name) : t("Choose a model on the Devices step first")}</h3>${model ? `<p class="hint">Jetson Linux ${safe(model.release)} · ${model.packages.map(pkg => safe(pkg.name)).join(" · ")}</p>` : ""}<div class="grid">${path("download-dir", "Save directory", config.downloadDir)}<label>${t("Proxy override (HTTP/HTTPS/SOCKS5)")}<input id="download-proxy" value="${safe(config.proxy.enabled ? config.proxy.url : "")}" placeholder="socks5://127.0.0.1:10808"/></label></div><p class="hint">${t("Archives are verified with NVIDIA SHA1 hashes before extraction. Preparation requires root and can use substantial disk space.")}</p></div><div class="actions"><button class="primary" id="download" ${!model || !host.host ? "disabled" : ""}>${t("Download BSP, flash tools and rootfs")}</button><button id="prepare" ${!model || !host.root ? "disabled" : ""}>${t("Extract and prepare BSP")}</button><button id="cancel">${t("Cancel")}</button></div><div class="card" role="status" aria-live="polite"><p id="setup-stage">${safe(t(setupStage))}</p><progress id="setup-progress" value="${setupPercent}" max="100"></progress>${setupFailure ? `<p class="warning">${safe(setupFailure)}</p>` : ""}</div>`);
@@ -232,6 +247,12 @@ async function setupProvision() {
   let availableTemplates: Template[] = [];
   const choices = $("#templates");
   const selection = $("#template-selection");
+  const nameLabel = document.createElement("label");
+  nameLabel.textContent = t("Template name");
+  const nameInput = document.createElement("input");
+  nameInput.id = "template-name";
+  nameLabel.append(nameInput);
+  selection.after(nameLabel);
   const refresh = async () => {
     availableTemplates = await Provision.listTemplates();
     if (!choices.isConnected) return;
@@ -265,10 +286,10 @@ async function setupProvision() {
     selection.textContent = `${t("Scripts added to the editor")}: ${templates.map(template => template.name).join(", ")}`;
     script.focus();
   })().catch(fail);
-  $("#save-template").onclick = () => { const name = prompt("Template name"); if (name) void Provision.saveTemplate(name, val("script")).then(refresh).catch(fail); };
-  $("#rename-template").onclick = () => { const name = prompt("New name"); const oldName = [...selected][0]; if (name && oldName) void Provision.renameTemplate(oldName, name).then(() => { selected.delete(oldName); selected.add(name); return refresh(); }).catch(fail); };
-  $("#delete-template").onclick = () => { const name = [...selected][0]; if (name && confirm(`Delete ${name}?`)) void Provision.deleteTemplate(name).then(() => { selected.delete(name); return refresh(); }).catch(fail); };
-  $("#run").onclick = () => { config.l4t = val("provision-l4t"); void Environment.saveConfig(config).catch(fail); provisionOptions = { username: val("username"), hostname: val("hostname"), password: password.value, publicKey: val("publicKey"), overlay: val("overlay"), autologin: check("autologin"), packages: val("packages"), script: $<HTMLTextAreaElement>("#script").value, clearKeys: check("clearKeys"), clearMachineId: check("clearMachineId"), firstBoot: check("firstBoot") }; if (!confirmDanger(`Run rootfs provisioning?\n\nFull chroot script:\n${provisionOptions.script || "(none)"}`)) return; void stream(channel => Provision.run(config.l4t, provisionOptions, channel), log); };
+  $("#save-template").onclick = () => { const name = nameInput.value.trim(); if (!name) { nameInput.focus(); return; } void Provision.saveTemplate(name, val("script")).then(refresh).catch(fail); };
+  $("#rename-template").onclick = () => { const name = nameInput.value.trim(); const oldName = [...selected][0]; if (!name) { nameInput.focus(); return; } if (oldName) void Provision.renameTemplate(oldName, name).then(() => { selected.delete(oldName); selected.add(name); return refresh(); }).catch(fail); };
+  $("#delete-template").onclick = () => void (async () => { const name = [...selected][0]; if (!name || !await Environment.confirm(t("Please confirm"), t("Delete selected template?"), name, t("Cancel"), t("Continue"))) return; await Provision.deleteTemplate(name); selected.delete(name); await refresh(); })().catch(fail);
+  $("#run").onclick = () => void (async () => { config.l4t = val("provision-l4t"); await Environment.saveConfig(config); provisionOptions = { username: val("username"), hostname: val("hostname"), password: password.value, publicKey: val("publicKey"), overlay: val("overlay"), autologin: check("autologin"), packages: val("packages"), script: $<HTMLTextAreaElement>("#script").value, clearKeys: check("clearKeys"), clearMachineId: check("clearMachineId"), firstBoot: check("firstBoot") }; if (!await Environment.confirm(t("Please confirm"), t("Run rootfs provisioning?"), `${t("Full chroot script:")}\n${provisionOptions.script || t("(none)")}`, t("Cancel"), t("Continue"))) return; await stream(channel => Provision.run(config.l4t, provisionOptions, channel), log); })().catch(fail);
   $("#cancel").onclick = () => void Provision.cancel().catch(fail);
 }
 $("#copy").onclick = () => void navigator.clipboard.writeText(lines.join("\n")).catch(fail);

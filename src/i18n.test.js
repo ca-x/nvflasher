@@ -18,3 +18,10 @@ test("recovery instructions and troubleshooting are available in Chinese", () =>
   expect(translate("On the 12-pin button header, short the pins labeled REC and GND. Do not guess pin positions.", "zh-CN")).toContain("REC 和 GND");
   expect(translate("For the Orin Nano 8GB module, 0955:7523 (APX) indicates Force Recovery; a stopped fan alone does not identify the mode.", "zh-CN")).toContain("0955:7523");
 });
+
+test("Arch AUR instructions name the required executable", () => {
+  expect(translate("Arch: abootimg is an AUR package, not a pacman repository package. Install it as your regular user (never as root), then rerun diagnostics.", "zh-CN"))
+    .toContain("abootimg");
+  expect(translate("Host is missing abootimg; see Environment for installation instructions.", "zh-CN"))
+    .toContain("abootimg");
+});
