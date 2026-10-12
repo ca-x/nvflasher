@@ -3,6 +3,7 @@ package provision
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"io"
 	"nvflasher/internal/runner"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 )
 
 type Options struct {
@@ -134,7 +136,7 @@ func Run(ctx context.Context, dir string, o Options, emit func(string)) error {
 	}
 	return nil
 }
-func withChroot(ctx context.Context, root string, run func() error) error {
+func withChroot(ctx context.Context, root string, run func() error) (result error) {
 	dest := filepath.Join(root, "usr/bin/qemu-aarch64-static")
 	if err := safeTarget(root, dest); err != nil {
 		return err
@@ -147,53 +149,46 @@ func withChroot(ctx context.Context, root string, run func() error) error {
 		if err = os.WriteFile(dest, qemu, 0755); err != nil {
 			return err
 		}
-		defer os.Remove(dest)
+		defer func() { result = errors.Join(result, os.Remove(dest)) }()
 	} else if err != nil {
 		return err
 	}
-	resolv := filepath.Join(root, "etc/resolv.conf")
-	resolvInfo, _ := os.Lstat(resolv)
-	linkTarget := ""
-	if resolvInfo != nil && resolvInfo.Mode()&os.ModeSymlink != 0 {
-		linkTarget, _ = os.Readlink(resolv)
+	host, err := os.ReadFile("/etc/resolv.conf")
+	if err != nil {
+		return fmt.Errorf("read host DNS configuration: %w", err)
 	}
-	original, readErr := os.ReadFile(resolv)
-	host, hostErr := os.ReadFile("/etc/resolv.conf")
-	if hostErr == nil {
-		if err := os.Remove(resolv); err != nil && !os.IsNotExist(err) {
-			return err
-		}
-		if err := os.WriteFile(resolv, host, 0644); err != nil {
-			if linkTarget != "" {
-				_ = os.Symlink(linkTarget, resolv)
-			}
-			return err
-		}
+	restoreDNS, err := replaceChrootDNS(root, host)
+	if err != nil {
+		return fmt.Errorf("prepare chroot DNS: %w", err)
 	}
-	defer func() {
-		if hostErr == nil {
-			_ = os.Remove(resolv)
-			if linkTarget != "" {
-				_ = os.Symlink(linkTarget, resolv)
-			} else if readErr == nil {
-				_ = os.WriteFile(resolv, original, 0644)
-			}
-		}
-	}()
+	defer func() { result = errors.Join(result, restoreDNS()) }()
 	mounted := []string{}
 	defer func() {
 		for i := len(mounted) - 1; i >= 0; i-- {
-			_ = runner.Run(context.Background(), runner.Command{Args: []string{"umount", mounted[i]}}, func(string) {})
+			cleanupCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			err := runner.Run(cleanupCtx, runner.Command{Args: []string{"umount", mounted[i]}}, func(string) {})
+			cancel()
+			if err != nil {
+				result = errors.Join(result, fmt.Errorf("unmount %s: %w", mounted[i], err))
+			}
 		}
 	}()
 	for _, path := range []string{"proc", "sys", "dev", "dev/pts", "dev/shm"} {
 		mountpoint := filepath.Join(root, path)
+		if err := safeParent(root, mountpoint); err != nil {
+			return err
+		}
+		if err := safeTarget(root, mountpoint); err != nil {
+			return err
+		}
 		if err := os.MkdirAll(mountpoint, 0755); err != nil {
 			return err
 		}
 		args := []string{"mount", "--bind", "/" + path, mountpoint}
-		if path == "proc" || path == "sys" {
-			args = []string{"mount", "-t", path, path, mountpoint}
+		if path == "proc" {
+			args = []string{"mount", "-t", "proc", "proc", mountpoint}
+		} else if path == "sys" {
+			args = []string{"mount", "-t", "sysfs", "sysfs", mountpoint}
 		}
 		if err := runner.Run(ctx, runner.Command{Args: args}, func(string) {}); err != nil {
 			return err
