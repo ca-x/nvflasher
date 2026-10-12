@@ -15,6 +15,11 @@ import (
 )
 
 type Options struct {
+	Wallpaper      string `json:"wallpaper"`
+	BootLogo       string `json:"bootLogo"`
+	Timezone       string `json:"timezone"`
+	Locale         string `json:"locale"`
+	AptMirror      string `json:"aptMirror"`
 	Username       string `json:"username"`
 	Password       string `json:"password"`
 	Hostname       string `json:"hostname"`
@@ -59,6 +64,13 @@ func Steps(dir string, o Options) ([]Step, error) {
 	if o.Overlay != "" {
 		steps = append(steps, Step{"Apply overlay", runner.Command{Args: []string{"cp", "-a", filepath.Join(o.Overlay, "."), root}}})
 	}
+	systemScript, err := systemConfiguration(o)
+	if err != nil {
+		return nil, err
+	}
+	if systemScript != "" {
+		steps = append(steps, Step{"Configure chroot system", runner.Command{Args: []string{"chroot", root, "/bin/bash", "-s"}, Input: systemScript}})
+	}
 	packages := strings.Fields(o.Packages)
 	for _, p := range packages {
 		if !packageName.MatchString(p) {
@@ -68,6 +80,9 @@ func Steps(dir string, o Options) ([]Step, error) {
 	if len(packages) > 0 {
 		script := "export DEBIAN_FRONTEND=noninteractive\napt-get update && apt-get install -y --no-install-recommends " + strings.Join(packages, " ") + "\n"
 		steps = append(steps, Step{"Install packages", runner.Command{Args: []string{"chroot", root, "/bin/bash", "-s"}, Input: script}})
+	}
+	if appearanceScript := appearanceConfiguration(o); appearanceScript != "" {
+		steps = append(steps, Step{"Configure chroot appearance", runner.Command{Args: []string{"chroot", root, "/bin/bash", "-s"}, Input: appearanceScript}})
 	}
 	if strings.TrimSpace(o.Script) != "" {
 		steps = append(steps, Step{"Run chroot script", runner.Command{Args: []string{"chroot", root, "/bin/bash", "-s"}, Input: "export DEBIAN_FRONTEND=noninteractive\nset -e\n" + o.Script}})
@@ -88,12 +103,20 @@ func Run(ctx context.Context, dir string, o Options, emit func(string)) error {
 			return fmt.Errorf("invalid overlay directory")
 		}
 	}
+	if err := validateAppearance(o); err != nil {
+		return err
+	}
 	for _, step := range steps {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 		emit("Step: " + step.Name)
-		if strings.HasPrefix(step.Name, "Install") || step.Name == "Run chroot script" {
+		if step.Name == "Configure chroot appearance" {
+			if err := installAppearance(root, o); err != nil {
+				return fmt.Errorf("%s: %w", step.Name, err)
+			}
+		}
+		if len(step.Command.Args) > 0 && step.Command.Args[0] == "chroot" {
 			err = withChroot(ctx, root, func() error { return runner.Run(ctx, step.Command, emit) })
 		} else {
 			err = runner.Run(ctx, step.Command, emit)

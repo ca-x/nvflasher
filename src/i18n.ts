@@ -1,6 +1,13 @@
 export type Language = "en" | "zh-CN";
 
 export const messages: Record<string, string> = {
+  "Timezone (blank keeps current)": "时区（留空保留原配置）",
+  "System locale (blank keeps current)": "系统 Locale（留空保留原配置）",
+  "Ubuntu ARM64 APT mirror (blank keeps current)": "Ubuntu ARM64 软件源（留空保留原配置）",
+  "Only Ubuntu ports sources are replaced; NVIDIA sources are preserved.": "仅替换 Ubuntu ports 软件源，保留 NVIDIA 专用源。",
+  "GNOME default wallpaper (PNG/JPEG)": "GNOME 默认壁纸（PNG/JPEG）",
+  "Linux boot logo (Plymouth PNG)": "Linux 启动 Logo（Plymouth PNG）",
+  "Wallpaper sets GNOME defaults, not existing user overrides. Boot logo needs Plymouth and a supported initramfs; it does not replace the UEFI/NVIDIA firmware logo.": "壁纸设置 GNOME 默认值，不覆盖用户已有设置。启动 Logo 需要 Plymouth 和支持的 initramfs，不替换 UEFI/NVIDIA 固件 Logo。" ,
   "Check and clean image resources": "检查并清理镜像占用",
   "Only idle BSP image mounts will be unmounted and detached. Busy resources are refused. No images are deleted and flashing will not start.": "仅安全卸载并解绑空闲的 BSP 镜像；发现占用将拒绝清理。不删除镜像，也不会开始刷机。",
   "Language": "语言", "JETSON WORKSTATION · v0.1.1": "JETSON 工作站 · v0.1.1",

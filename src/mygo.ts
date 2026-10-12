@@ -80,6 +80,11 @@ export interface Progress {
 }
 
 export interface ProvisionForm {
+  wallpaper: string;
+  bootLogo: string;
+  timezone: string;
+  locale: string;
+  aptMirror: string;
   username: string;
   hostname: string;
   autologin: boolean;
@@ -93,6 +98,11 @@ export interface ProvisionForm {
 }
 
 export interface ProvisionOptions {
+  wallpaper: string;
+  bootLogo: string;
+  timezone: string;
+  locale: string;
+  aptMirror: string;
   username: string;
   password: string;
   hostname: string;

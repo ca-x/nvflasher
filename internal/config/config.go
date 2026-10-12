@@ -25,6 +25,11 @@ type Config struct {
 }
 
 type ProvisionForm struct {
+	Wallpaper      string `json:"wallpaper"`
+	BootLogo       string `json:"bootLogo"`
+	Timezone       string `json:"timezone"`
+	Locale         string `json:"locale"`
+	AptMirror      string `json:"aptMirror"`
 	Username       string `json:"username"`
 	Hostname       string `json:"hostname"`
 	Autologin      bool   `json:"autologin"`

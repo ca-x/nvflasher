@@ -53,7 +53,14 @@ Arch 刷写时应用只在 NVIDIA 刷写子进程的环境中将 `service nfs-ke
 
 主界面按“刷机向导”和“Rootfs 配置向导”组织；刷机向导依次进入环境检测、选择设备型号、下载与准备、刷写。刷写页可进入“已有 MFI 包”子界面，选择 MFI 目录或 `.tar.gz` 压缩包刷写；生成新 MFI 包的选项默认收起。单个 ISO 或任意 `.img` 文件不能直接作为 MFI 包刷写。
 
-预置功能显示实际使用的 `Linux_for_Tegra/rootfs`，可浏览切换目录。支持用户、overlay、chroot apt 装包、通过 stdin 执行 `chroot rootfs /bin/bash -s` 非交互脚本；可多选模板并将脚本添加到可见的编辑框，执行前请检查完整脚本。SSH Recovery 需要设备可开机、SSH 可用，且主机密钥已加入 `~/.ssh/known_hosts`。官方包自动下载支持可访问的 HTTP(S) 地址与 HTTP/HTTPS/SOCKS5 代理，不支持 NVIDIA 帐号登录。
+预置功能显示实际使用的 `Linux_for_Tegra/rootfs`，可浏览切换目录。
+
+- 时区、系统 Locale 和 Ubuntu ARM64 APT 镜像均可配置，留空保留原配置。软件源先于装包生效，只替换 `ubuntu-ports` URL（支持 `.list` 和 deb822 `.sources`），保留 NVIDIA 专用源；找不到匹配源时会报错，不猜测发行版。Locale 会安装并生成 UTF-8 locale，不包含中文字体、输入法或完整桌面语言包。
+- GNOME 默认壁纸支持 PNG/JPEG；设置桌面及锁屏的默认值，不覆盖用户已有设置。rootfs 需要 GNOME 和 `dconf-cli`（可在预安装软件中填写），外观配置在装包后执行。
+- Linux 启动 Logo 支持 PNG，生成 Plymouth 主题并更新 initramfs。rootfs 必须具备 Plymouth、`initramfs-tools` 和 `/boot/initrd.img-*`；启动参数还需启用 `splash`。此功能**不替换 UEFI/NVIDIA 固件 Logo**；标准 Jetson BSP 若仅使用 `/boot/initrd`，需要手动完成 BSP 启动链集成，软件会明确报错而不是假装成功。
+- 图片限 32 MiB、8192×8192；所有新增设置和图片路径会保存，图片文件仍需在执行时可访问。留空不会撤销此前已经写入 rootfs 的修改。
+
+支持用户、overlay、chroot apt 装包、通过 stdin 执行 `chroot rootfs /bin/bash -s` 非交互脚本；可多选模板并将脚本添加到可见的编辑框，执行前请检查完整脚本。SSH Recovery 需要设备可开机、SSH 可用，且主机密钥已加入 `~/.ssh/known_hosts`。官方包自动下载支持可访问的 HTTP(S) 地址与 HTTP/HTTPS/SOCKS5 代理，不支持 NVIDIA 帐号登录。
 
 设置写入 `os.UserConfigDir()/nvflasher/config.json`。设备和 SSH 密码不持久化；只有勾选“记住代理凭据”才会保存代理账户信息（存在泄露风险）。自定义脚本应避免输出敏感数据。
 
