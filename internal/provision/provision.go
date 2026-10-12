@@ -15,6 +15,12 @@ import (
 )
 
 type Options struct {
+	ChineseSupport bool   `json:"chineseSupport"`
+	Suspend        string `json:"suspend"`
+	ScreenLock     string `json:"screenLock"`
+	ScreenBlank    string `json:"screenBlank"`
+	Autostart      string `json:"autostart"`
+	DebFiles       string `json:"debFiles"`
 	Wallpaper      string `json:"wallpaper"`
 	BootLogo       string `json:"bootLogo"`
 	Timezone       string `json:"timezone"`
@@ -55,6 +61,9 @@ func Steps(dir string, o Options) ([]Step, error) {
 	if !identifier.MatchString(o.Username) || !identifier.MatchString(o.Hostname) || o.Password == "" {
 		return nil, fmt.Errorf("invalid user, hostname or empty password")
 	}
+	if err := validateCustomization(o); err != nil {
+		return nil, err
+	}
 	root := filepath.Join(dir, "rootfs")
 	args := []string{"./tools/l4t_create_default_user.sh", "-u", o.Username, "-p", o.Password, "-n", o.Hostname, "--accept-license"}
 	if o.Autologin {
@@ -72,6 +81,9 @@ func Steps(dir string, o Options) ([]Step, error) {
 		steps = append(steps, Step{"Configure chroot system", runner.Command{Args: []string{"chroot", root, "/bin/bash", "-s"}, Input: systemScript}})
 	}
 	packages := strings.Fields(o.Packages)
+	if o.ChineseSupport {
+		packages = append(packages, "language-pack-zh-hans", "language-pack-gnome-zh-hans", "fonts-wqy-microhei", "ibus", "ibus-pinyin", "im-config")
+	}
 	for _, p := range packages {
 		if !packageName.MatchString(p) {
 			return nil, fmt.Errorf("invalid package: %q", p)
@@ -80,6 +92,12 @@ func Steps(dir string, o Options) ([]Step, error) {
 	if len(packages) > 0 {
 		script := "export DEBIAN_FRONTEND=noninteractive\napt-get update && apt-get install -y --no-install-recommends " + strings.Join(packages, " ") + "\n"
 		steps = append(steps, Step{"Install packages", runner.Command{Args: []string{"chroot", root, "/bin/bash", "-s"}, Input: script}})
+	}
+	if strings.TrimSpace(o.DebFiles) != "" {
+		steps = append(steps, Step{"Install local DEBs", runner.Command{Args: []string{"chroot", root, "/bin/bash", "-s"}, Input: "set -eu\nexport DEBIAN_FRONTEND=noninteractive\napt-get update\napt-get install -y -- /tmp/NVFLASHER_DEBS/*.deb\n"}})
+	}
+	if script := desktopConfiguration(o); script != "" {
+		steps = append(steps, Step{"Configure desktop defaults", runner.Command{Args: []string{"chroot", root, "/bin/bash", "-s"}, Input: script}})
 	}
 	if appearanceScript := appearanceConfiguration(o); appearanceScript != "" {
 		steps = append(steps, Step{"Configure chroot appearance", runner.Command{Args: []string{"chroot", root, "/bin/bash", "-s"}, Input: appearanceScript}})
@@ -106,6 +124,9 @@ func Run(ctx context.Context, dir string, o Options, emit func(string)) error {
 	if err := validateAppearance(o); err != nil {
 		return err
 	}
+	if err := validateDebFiles(ctx, o.DebFiles); err != nil {
+		return err
+	}
 	for _, step := range steps {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -115,6 +136,24 @@ func Run(ctx context.Context, dir string, o Options, emit func(string)) error {
 			if err := installAppearance(root, o); err != nil {
 				return fmt.Errorf("%s: %w", step.Name, err)
 			}
+		}
+		if step.Name == "Configure desktop defaults" {
+			if err := installDesktop(root, o); err != nil {
+				return fmt.Errorf("%s: %w", step.Name, err)
+			}
+		}
+		if step.Name == "Install local DEBs" {
+			stage, stageErr := stageDebFiles(ctx, root, o.DebFiles)
+			if stageErr != nil {
+				return stageErr
+			}
+			step.Command.Input = strings.ReplaceAll(step.Command.Input, "/tmp/NVFLASHER_DEBS", "/tmp/"+filepath.Base(stage))
+			err = withChroot(ctx, root, func() error { return runner.Run(ctx, step.Command, emit) })
+			err = errors.Join(err, os.RemoveAll(stage))
+			if err != nil {
+				return fmt.Errorf("%s: %w", step.Name, err)
+			}
+			continue
 		}
 		if len(step.Command.Args) > 0 && step.Command.Args[0] == "chroot" {
 			err = withChroot(ctx, root, func() error { return runner.Run(ctx, step.Command, emit) })

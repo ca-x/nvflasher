@@ -1,6 +1,18 @@
 export type Language = "en" | "zh-CN";
 
 export const messages: Record<string, string> = {
+  "Install Chinese language support, fonts and IBus Pinyin": "安装中文语言支持、字体和 IBus 拼音",
+  "GNOME automatic suspend": "GNOME 自动休眠",
+  "GNOME automatic screen lock": "GNOME 自动锁屏",
+  "GNOME idle screen blanking": "GNOME 空闲息屏",
+  "Keep current": "保留原配置",
+  "Enable": "启用",
+  "Disable": "禁用",
+  "GNOME settings change desktop defaults, not existing user overrides. Enabling restores standard timeouts. Disabling screen lock reduces security.": "GNOME 设置修改桌面默认值，不覆盖用户已有设置。启用恢复标准超时。禁用锁屏会降低安全性。",
+  "Desktop login autostart executable (target absolute path)": "桌面登录自启动程序（目标系统绝对路径）",
+  "Runs as the created user after desktop login, not as a root service. No shell commands or arguments; executable must exist in rootfs.": "桌面登录后以新建用户身份运行，不是 root 服务。不支持 Shell 命令或参数；程序必须存在于 rootfs。",
+  "Local DEB files (one host path per line)": "本地 DEB 文件（每行一个宿主文件路径）",
+  "Only ARM64 or architecture-independent packages. Files must remain accessible when provisioning; APT may download dependencies.": "仅支持 ARM64 或架构无关软件包。预置时文件必须仍可访问；APT 可能下载依赖。",
   "Timezone (blank keeps current)": "时区（留空保留原配置）",
   "System locale (blank keeps current)": "系统 Locale（留空保留原配置）",
   "Ubuntu ARM64 APT mirror (blank keeps current)": "Ubuntu ARM64 软件源（留空保留原配置）",

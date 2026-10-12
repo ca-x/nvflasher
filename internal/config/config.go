@@ -25,6 +25,12 @@ type Config struct {
 }
 
 type ProvisionForm struct {
+	ChineseSupport bool   `json:"chineseSupport"`
+	Suspend        string `json:"suspend"`
+	ScreenLock     string `json:"screenLock"`
+	ScreenBlank    string `json:"screenBlank"`
+	Autostart      string `json:"autostart"`
+	DebFiles       string `json:"debFiles"`
 	Wallpaper      string `json:"wallpaper"`
 	BootLogo       string `json:"bootLogo"`
 	Timezone       string `json:"timezone"`

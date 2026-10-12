@@ -80,6 +80,12 @@ export interface Progress {
 }
 
 export interface ProvisionForm {
+  chineseSupport: boolean;
+  suspend: string;
+  screenLock: string;
+  screenBlank: string;
+  autostart: string;
+  debFiles: string;
   wallpaper: string;
   bootLogo: string;
   timezone: string;
@@ -98,6 +104,12 @@ export interface ProvisionForm {
 }
 
 export interface ProvisionOptions {
+  chineseSupport: boolean;
+  suspend: string;
+  screenLock: string;
+  screenBlank: string;
+  autostart: string;
+  debFiles: string;
   wallpaper: string;
   bootLogo: string;
   timezone: string;

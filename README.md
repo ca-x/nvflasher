@@ -13,6 +13,17 @@ nvflasher v0.1.1 is a MyGo desktop app for preparing and flashing NVIDIA Jetson 
 
 Screenshot: _to be added after first packaged release_.
 
+## General software customization
+
+Provision rootfs includes optional, platform-independent software settings:
+
+- **Chinese support** installs Chinese language support, fonts and IBus Pinyin. This is separate from the system Locale; selecting it does not imply changing `LANG`. Package installation needs compatible Ubuntu repositories and network access.
+- **GNOME automatic suspend, screen lock and idle screen blanking** each offer Keep current / Enable / Disable. These set desktop defaults, not existing user overrides; enabling restores standard timeouts rather than previous custom values. The target needs the corresponding GNOME schemas and `dconf-cli`. Disabling screen lock reduces physical-access security. These are not firmware or system-wide sleep controls.
+- **Desktop login autostart** accepts one absolute executable path inside the target rootfs, for example `/opt/myapp/myapp`. The executable must exist; use Overlay or package installation to supply it. It runs as the created user after a desktop login, not as a root/system service. Shell commands and arguments are not supported.
+- **Local DEB files** accepts one local host path per line. Only `arm64` and `all` packages are supported. APT installs them during image preparation and may download dependencies. Install only trusted packages: their maintainer scripts run as root. Saved settings contain paths, not package contents; those files must remain accessible at provisioning time.
+
+Old configurations default to Chinese support off, desktop settings unchanged and no autostart or local DEB installation. Empty options leave existing rootfs changes in place; they do not undo earlier customization. No vendor-specific services, hardware rules or platform boot changes are included. Real-device validation remains required.
+
 ## Build
 
 Requires Go 1.27.2+, Bun, MyGo CLI 0.3.5, and the MyGo GTK3/WebKitGTK 4.1 build prerequisites on Linux.
