@@ -28,6 +28,11 @@ func TestCustomizationSteps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	syntax := exec.Command("bash", "-n")
+	syntax.Stdin = strings.NewReader(desktopPreflight(o))
+	if out, err := syntax.CombinedOutput(); err != nil {
+		t.Fatalf("preflight shell syntax: %v %s", err, out)
+	}
 	names := []string{"Create default user", "Configure chroot system", "Install packages", "Install local DEBs", "Configure desktop defaults"}
 	if len(steps) != len(names) {
 		t.Fatalf("steps: %+v", steps)
@@ -44,10 +49,69 @@ func TestCustomizationSteps(t *testing.T) {
 			}
 		}
 	}
+	if !strings.Contains(steps[2].Command.Input, "dconf-cli") {
+		t.Fatal("Chinese desktop support missing dconf dependency")
+	}
 	if strings.Contains(steps[2].Command.Input, "update-locale") {
 		t.Fatal("Chinese support forces locale")
 	}
 }
+func TestDesktopPreflight(t *testing.T) {
+	for _, capability := range []string{"missing-command", "missing-schema", "supported"} {
+		t.Run(capability, func(t *testing.T) {
+			root, bin := t.TempDir(), t.TempDir()
+			grep, err := exec.LookPath("grep")
+			if err != nil {
+				t.Skip("grep unavailable")
+			}
+			if err := os.Symlink(grep, filepath.Join(bin, "grep")); err != nil {
+				t.Fatal(err)
+			}
+			if capability != "missing-command" {
+				for name, body := range map[string]string{
+					"dconf":     "exit 0\n",
+					"gsettings": "echo " + map[bool]string{true: "org.gnome.desktop.screensaver", false: "unrelated.schema"}[capability == "supported"] + "\n",
+				} {
+					if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\n"+body), 0755); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			calls := 0
+			err = configureDesktop(root, Options{ScreenLock: "disable"}, func(script string) error {
+				calls++
+				cmd := exec.Command("/bin/bash", "-s")
+				cmd.Env = append(os.Environ(), "PATH="+bin)
+				cmd.Stdin = strings.NewReader(script)
+				return cmd.Run()
+			})
+			_, statErr := os.Stat(filepath.Join(root, "etc/dconf"))
+			if capability == "supported" {
+				if err != nil || statErr != nil || calls != 2 {
+					t.Fatalf("supported: %v %v calls=%d", err, statErr, calls)
+				}
+			} else if err == nil || !os.IsNotExist(statErr) || calls != 1 {
+				t.Fatalf("failed preflight wrote defaults: %v %v calls=%d", err, statErr, calls)
+			}
+		})
+	}
+}
+
+func TestStageDebRejectsSymlink(t *testing.T) {
+	root, host := t.TempDir(), t.TempDir()
+	path := filepath.Join(host, "linked.deb")
+	if err := os.Symlink("/dev/zero", path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := stageDebFiles(context.Background(), root, path); err == nil {
+		t.Fatal("accepted symlink source")
+	}
+	entries, err := os.ReadDir(filepath.Join(root, "tmp"))
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("staging cleanup failed: %v %v", entries, err)
+	}
+}
+
 func TestDesktopFiles(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "opt"), 0755); err != nil {

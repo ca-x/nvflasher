@@ -82,7 +82,7 @@ func Steps(dir string, o Options) ([]Step, error) {
 	}
 	packages := strings.Fields(o.Packages)
 	if o.ChineseSupport {
-		packages = append(packages, "language-pack-zh-hans", "language-pack-gnome-zh-hans", "fonts-wqy-microhei", "ibus", "ibus-pinyin", "im-config")
+		packages = append(packages, "language-pack-zh-hans", "language-pack-gnome-zh-hans", "fonts-wqy-microhei", "ibus", "ibus-pinyin", "im-config", "dconf-cli")
 	}
 	for _, p := range packages {
 		if !packageName.MatchString(p) {
@@ -138,9 +138,17 @@ func Run(ctx context.Context, dir string, o Options, emit func(string)) error {
 			}
 		}
 		if step.Name == "Configure desktop defaults" {
-			if err := installDesktop(root, o); err != nil {
+			err = withChroot(ctx, root, func() error {
+				return configureDesktop(root, o, func(script string) error {
+					command := step.Command
+					command.Input = script
+					return runner.Run(ctx, command, emit)
+				})
+			})
+			if err != nil {
 				return fmt.Errorf("%s: %w", step.Name, err)
 			}
+			continue
 		}
 		if step.Name == "Install local DEBs" {
 			stage, stageErr := stageDebFiles(ctx, root, o.DebFiles)

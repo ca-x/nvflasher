@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 func validateCustomization(o Options) error {
@@ -81,9 +82,14 @@ func stageDebFiles(ctx context.Context, root, value string) (string, error) {
 		if err := ctx.Err(); err != nil {
 			return fail(err)
 		}
-		src, err := os.Open(path)
+		src, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 		if err != nil {
 			return fail(err)
+		}
+		info, err := src.Stat()
+		if err != nil || !info.Mode().IsRegular() {
+			src.Close()
+			return fail(fmt.Errorf("DEB source must be a regular file: %s", path))
 		}
 		dstPath := filepath.Join(stage, fmt.Sprintf("package-%d.deb", i))
 		dst, err := os.OpenFile(dstPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
@@ -92,13 +98,8 @@ func stageDebFiles(ctx context.Context, root, value string) (string, error) {
 			return fail(err)
 		}
 		_, copyErr := io.Copy(dst, src)
-		src.Close()
-		closeErr := dst.Close()
-		if copyErr != nil {
-			return fail(copyErr)
-		}
-		if closeErr != nil {
-			return fail(closeErr)
+		if err := errors.Join(copyErr, src.Close(), dst.Close()); err != nil {
+			return fail(err)
 		}
 		if err := checkDeb(ctx, dstPath); err != nil {
 			return fail(err)
@@ -111,15 +112,36 @@ func desktopConfiguration(o Options) string {
 		return ""
 	}
 	script := "set -eu\n"
+	if len(desktopSchemas(o)) > 0 {
+		script += "dconf update\n"
+	}
+	if o.Autostart != "" {
+		script += "chown '" + o.Username + "' '/home/" + o.Username + "/.config' '/home/" + o.Username + "/.config/autostart' '/home/" + o.Username + "/.config/autostart/nvflasher.desktop'\n"
+	}
+	return script
+}
+
+func configureDesktop(root string, o Options, run func(string) error) error {
+	if err := run(desktopPreflight(o)); err != nil {
+		return err
+	}
+	if err := installDesktop(root, o); err != nil {
+		return err
+	}
+	return run(desktopConfiguration(o))
+}
+
+// Run after package installation, but before writing any desktop defaults.
+func desktopPreflight(o Options) string {
+	script := "set -eu\n"
 	if o.Suspend != "" || o.ScreenLock != "" || o.ScreenBlank != "" || o.ChineseSupport {
 		script += "command -v dconf >/dev/null && command -v gsettings >/dev/null || { echo 'Desktop defaults require GNOME, dconf-cli and gsettings'; exit 1; }\n"
 		for _, schema := range desktopSchemas(o) {
 			script += "gsettings list-schemas | grep -Fxq '" + schema + "' || { echo 'Required GNOME schema missing: " + schema + "'; exit 1; }\n"
 		}
-		script += "dconf update\n"
 	}
 	if o.Autostart != "" {
-		script += "test \"$(id -u '" + o.Username + "')\" -ne 0\nchown '" + o.Username + "' '/home/" + o.Username + "/.config' '/home/" + o.Username + "/.config/autostart' '/home/" + o.Username + "/.config/autostart/nvflasher.desktop'\n"
+		script += "test \"$(id -u '" + o.Username + "')\" -ne 0\n"
 	}
 	return script
 }

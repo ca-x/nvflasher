@@ -2,7 +2,7 @@
 
 <p align="center"><img src="assets/logo.png" alt="nvflasher" width="400"></p>
 
-nvflasher v0.1.1 is a MyGo desktop app for preparing and flashing NVIDIA Jetson devices, with Orin Nano Super defaults. It wraps NVIDIA's official Linux for Tegra scripts; it does **not** implement a flashing protocol.
+nvflasher v0.1.2 is a MyGo desktop app for preparing and flashing NVIDIA Jetson devices, with Orin Nano Super defaults. It wraps NVIDIA's official Linux for Tegra scripts; it does **not** implement a flashing protocol.
 
 | Feature | Linux x86_64 | Windows / macOS |
 | --- | --- | --- |
@@ -17,10 +17,10 @@ Screenshot: _to be added after first packaged release_.
 
 Provision rootfs includes optional, platform-independent software settings:
 
-- **Chinese support** installs Chinese language support, fonts and IBus Pinyin. This is separate from the system Locale; selecting it does not imply changing `LANG`. Package installation needs compatible Ubuntu repositories and network access.
-- **GNOME automatic suspend, screen lock and idle screen blanking** each offer Keep current / Enable / Disable. These set desktop defaults, not existing user overrides; enabling restores standard timeouts rather than previous custom values. The target needs the corresponding GNOME schemas and `dconf-cli`. Disabling screen lock reduces physical-access security. These are not firmware or system-wide sleep controls.
+- **Chinese support** installs Chinese language support, fonts and IBus Pinyin. This is separate from the system Locale; selecting it does not imply changing `LANG`. Package installation needs compatible Ubuntu repositories and network access. This option configures GNOME input-source defaults and installs `dconf-cli`; the target must provide the GNOME input-source schema. Other desktop environments are not automatically configured.
+- **GNOME automatic suspend, screen lock and idle screen blanking** each offer Keep current / Enable / Disable. These set desktop defaults, not existing user overrides; enabling restores standard timeouts rather than previous custom values. The target needs the corresponding GNOME schemas and `dconf-cli`. Capabilities are checked after package installation, before any desktop defaults are written; missing components produce a clear error (earlier provisioning steps are not rolled back). Disabling screen lock reduces physical-access security. These are not firmware or system-wide sleep controls.
 - **Desktop login autostart** accepts one absolute executable path inside the target rootfs, for example `/opt/myapp/myapp`. The executable must exist; use Overlay or package installation to supply it. It runs as the created user after a desktop login, not as a root/system service. Shell commands and arguments are not supported.
-- **Local DEB files** accepts one local host path per line. Only `arm64` and `all` packages are supported. APT installs them during image preparation and may download dependencies. Install only trusted packages: their maintainer scripts run as root. Saved settings contain paths, not package contents; those files must remain accessible at provisioning time.
+- **Local DEB files** accepts one local host path per line. Browse appends a selected file without adding duplicate paths. Only `arm64` and `all` packages are supported. APT installs them during image preparation and may download dependencies. Install only trusted packages: their maintainer scripts run as root. Saved settings contain paths, not package contents; those files must remain accessible at provisioning time.
 
 Old configurations default to Chinese support off, desktop settings unchanged and no autostart or local DEB installation. Empty options leave existing rootfs changes in place; they do not undo earlier customization. No vendor-specific services, hardware rules or platform boot changes are included. Real-device validation remains required.
 
